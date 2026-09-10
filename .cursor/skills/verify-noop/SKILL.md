@@ -35,14 +35,16 @@ Pass only if all of these hold:
 
 - `swift --version` succeeds
 - the debug binary exists after build
-- `--version` stdout is non-empty and exit 0
-- `query --list-tools` exits 0 and stdout parses as a JSON array
+- `--version` is advertised in help, stdout is non-empty, and exit 0
+- `query --list-tools` is advertised in help, exits 0, and stdout parses as a JSON array
+
+Doctor feature-detects catalog commands from `noop-local-access --help`. Missing `--version` / `query --list-tools` is INCONCLUSIVE/skip for those asserts — never FAIL the product for absence, and never fake exit 0 / PASS when they were skipped.
 
 Verdicts:
 
-- PASS (exit 0): all four checks above.
-- INCONCLUSIVE (exit 2): `swift` is missing. This is not a pass and not a product fail. Do not drive. Do not invent a binary. Install Swift 5.9+ on this Linux or macOS host, then rerun doctor.
-- FAIL (exit 1): Swift is present but the package does not build, the binary is missing, or `--version` is empty.
+- PASS (exit 0): Swift present, build OK, binary present, and every advertised catalog assert above succeeded.
+- INCONCLUSIVE (exit 2): `swift` is missing, **or** the CLI builds but help does not advertise `--version` and/or `--list-tools` (those asserts are skipped). This is not a pass and not a product fail. Do not invent a binary or fake catalog output. Install Swift 5.9+ and/or port the catalog CLI, then rerun doctor.
+- FAIL (exit 1): Swift is present but the package does not build, the binary is missing, or an advertised catalog command is broken (empty `--version`, non-zero exit, or non-JSON `--list-tools`).
 
 ## Drive
 

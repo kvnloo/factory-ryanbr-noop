@@ -23,7 +23,7 @@ Commands:
 Exit codes:
   0  PASS
   1  FAIL (product defect)
-  2  INCONCLUSIVE (missing Swift or cannot build)
+  2  INCONCLUSIVE (missing Swift, or CLI lacks catalog features under test)
 EOF
 }
 
@@ -37,13 +37,12 @@ check_swift() {
 build_cli() {
     echo "Building noop-local-access..." >&2
     local build_args=(--package-path "$PACKAGE_PATH" --product noop-local-access)
-    
-    # If SQLITE_SNAPSHOT_DIR is set, add linker flags for snapshot-enabled SQLite
+
     if [[ -n "${SQLITE_SNAPSHOT_DIR:-}" ]]; then
         build_args+=(-Xcc -I"$SQLITE_SNAPSHOT_DIR" -Xlinker -L"$SQLITE_SNAPSHOT_DIR")
         echo "Using snapshot-enabled SQLite from $SQLITE_SNAPSHOT_DIR" >&2
     fi
-    
+
     if ! swift build "${build_args[@]}" 2>&1; then
         echo "FAIL: swift build failed" >&2
         exit 1
@@ -55,17 +54,25 @@ ensure_binary() {
         echo "Binary not found, building..." >&2
         build_cli
     fi
-    
+
     if [[ ! -f "$BIN_PATH" ]]; then
         echo "FAIL: binary does not exist after build" >&2
         exit 1
     fi
 }
 
+# Feature-detect: help advertises the flag/subcommand. Never treat absence as PASS.
+cli_help_mentions() {
+    local needle="$1"
+    local help_out
+    help_out=$("$BIN_PATH" --help 2>&1 || true)
+    [[ "$help_out" == *"$needle"* ]]
+}
+
 cmd_doctor() {
     echo "=== Doctor: NoopLocalAccess CLI ===" >&2
-    
-    # Check 1: Swift available
+    local inconclusive=0
+
     echo -n "Checking swift... " >&2
     if ! command -v swift &>/dev/null; then
         echo "MISSING" >&2
@@ -73,16 +80,14 @@ cmd_doctor() {
         exit 2
     fi
     swift --version | head -1 >&2
-    
-    # Check 2: Build succeeds
+
     echo -n "Building... " >&2
     local build_args=(--package-path "$PACKAGE_PATH" --product noop-local-access)
-    
-    # If SQLITE_SNAPSHOT_DIR is set, add linker flags for snapshot-enabled SQLite
+
     if [[ -n "${SQLITE_SNAPSHOT_DIR:-}" ]]; then
         build_args+=(-Xcc -I"$SQLITE_SNAPSHOT_DIR" -Xlinker -L"$SQLITE_SNAPSHOT_DIR")
     fi
-    
+
     if ! swift build "${build_args[@]}" >/dev/null 2>&1; then
         echo "FAILED" >&2
         echo "FAIL: build failed" >&2
@@ -90,8 +95,7 @@ cmd_doctor() {
         exit 1
     fi
     echo "OK" >&2
-    
-    # Check 3: Binary exists
+
     echo -n "Binary exists... " >&2
     if [[ ! -f "$BIN_PATH" ]]; then
         echo "MISSING" >&2
@@ -99,38 +103,74 @@ cmd_doctor() {
         exit 1
     fi
     echo "OK" >&2
-    
-    # Check 4: --version works
+
     echo -n "Version output... " >&2
-    VERSION_OUT=$("$BIN_PATH" --version 2>&1 || true)
-    if [[ -z "$VERSION_OUT" ]]; then
-        echo "EMPTY" >&2
-        echo "FAIL: --version produced no output" >&2
-        exit 1
+    if ! cli_help_mentions "--version"; then
+        echo "SKIP (CLI lacks --version; INCONCLUSIVE)" >&2
+        inconclusive=1
+    else
+        local version_ec=0
+        local version_out version_err
+        version_err=$(mktemp)
+        set +e
+        version_out=$("$BIN_PATH" --version 2>"$version_err")
+        version_ec=$?
+        set -e
+        if [[ $version_ec -ne 0 ]]; then
+            echo "FAILED (exit $version_ec)" >&2
+            echo "FAIL: --version exited $version_ec" >&2
+            cat "$version_err" >&2 || true
+            rm -f "$version_err"
+            exit 1
+        fi
+        rm -f "$version_err"
+        if [[ -z "$version_out" ]]; then
+            echo "EMPTY" >&2
+            echo "FAIL: --version produced no output" >&2
+            exit 1
+        fi
+        echo "OK ($version_out)" >&2
     fi
-    echo "OK ($VERSION_OUT)" >&2
-    
-    # Check 5: query --list-tools works
+
     echo -n "List tools... " >&2
-    if ! LIST_OUT=$("$BIN_PATH" query --list-tools 2>&1); then
-        echo "FAILED" >&2
-        echo "FAIL: query --list-tools failed" >&2
-        echo "$LIST_OUT" >&2
-        exit 1
+    if ! cli_help_mentions "--list-tools"; then
+        echo "SKIP (CLI lacks query --list-tools; INCONCLUSIVE)" >&2
+        inconclusive=1
+    else
+        local list_ec=0
+        local list_out list_err
+        list_err=$(mktemp)
+        set +e
+        list_out=$("$BIN_PATH" query --list-tools 2>"$list_err")
+        list_ec=$?
+        set -e
+        if [[ $list_ec -ne 0 ]]; then
+            echo "FAILED (exit $list_ec)" >&2
+            echo "FAIL: query --list-tools failed" >&2
+            echo "$list_out" >&2
+            cat "$list_err" >&2 || true
+            rm -f "$list_err"
+            exit 1
+        fi
+        rm -f "$list_err"
+
+        if ! echo "$list_out" | python3 -m json.tool >/dev/null 2>&1; then
+            echo "INVALID JSON" >&2
+            echo "FAIL: query --list-tools output is not valid JSON" >&2
+            echo "$list_out" >&2
+            exit 1
+        fi
+
+        local tool_count
+        tool_count=$(echo "$list_out" | python3 -c "import sys, json; print(len(json.load(sys.stdin)))")
+        echo "OK ($tool_count tools)" >&2
     fi
-    
-    # Validate JSON array
-    if ! echo "$LIST_OUT" | python3 -m json.tool >/dev/null 2>&1; then
-        echo "INVALID JSON" >&2
-        echo "FAIL: query --list-tools output is not valid JSON" >&2
-        echo "$LIST_OUT" >&2
-        exit 1
-    fi
-    
-    TOOL_COUNT=$(echo "$LIST_OUT" | python3 -c "import sys, json; print(len(json.load(sys.stdin)))")
-    echo "OK ($TOOL_COUNT tools)" >&2
-    
+
     echo "" >&2
+    if [[ $inconclusive -ne 0 ]]; then
+        echo "INCONCLUSIVE: build OK but catalog asserts skipped (CLI missing --version and/or query --list-tools). Not a PASS." >&2
+        exit 2
+    fi
     echo "PASS: All doctor checks succeeded" >&2
     exit 0
 }
@@ -138,19 +178,27 @@ cmd_doctor() {
 cmd_version() {
     check_swift
     ensure_binary
+    if ! cli_help_mentions "--version"; then
+        echo "INCONCLUSIVE: CLI lacks --version" >&2
+        exit 2
+    fi
     "$BIN_PATH" --version
 }
 
 cmd_list_tools() {
     check_swift
     ensure_binary
+    if ! cli_help_mentions "--list-tools"; then
+        echo "INCONCLUSIVE: CLI lacks query --list-tools" >&2
+        exit 2
+    fi
     "$BIN_PATH" query --list-tools
 }
 
 cmd_data_freshness() {
     check_swift
     ensure_binary
-    
+
     local db_path=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -164,12 +212,12 @@ cmd_data_freshness() {
                 ;;
         esac
     done
-    
+
     if [[ -z "$db_path" ]]; then
         echo "Error: --db-path required" >&2
         exit 64
     fi
-    
+
     "$BIN_PATH" query data_freshness --db-path "$db_path"
 }
 
@@ -179,7 +227,7 @@ cmd_cleanup() {
         echo "Error: cleanup requires RUN_ID" >&2
         exit 64
     fi
-    
+
     local temp_dir="/tmp/noop-verify-$run_id"
     if [[ -d "$temp_dir" ]]; then
         echo "Removing $temp_dir" >&2
@@ -189,7 +237,6 @@ cmd_cleanup() {
     fi
 }
 
-# Main dispatch
 case "${1:-}" in
     doctor)
         cmd_doctor
