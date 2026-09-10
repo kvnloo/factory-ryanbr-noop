@@ -3,9 +3,16 @@
 `noop-local-access` exposes bounded, read-only NOOP health data locally. It has no network or
 write/control path.
 
+MCP resource `noop://tools/catalog` returns the dispatcher `toolNames` list as JSON.
+`noop-local-access query --list-tools` and `noop-local-access tools` print that same JSON array.
+`noop-local-access --version` and `-V` print the non-empty product version (`noopLocalAccessServerVersion`).
+
 Use MCP over stdio with `noop-local-access mcp`, or query one tool directly as JSON:
 
 ```sh
+noop-local-access --version
+noop-local-access query --list-tools
+noop-local-access tools
 noop-local-access query health_snapshot --days 14
 noop-local-access query metric_series --key hrv --days 90
 noop-local-access query data_freshness

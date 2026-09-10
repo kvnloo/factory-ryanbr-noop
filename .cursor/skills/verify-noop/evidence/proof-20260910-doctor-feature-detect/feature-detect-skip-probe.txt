@@ -1,0 +1,5 @@
+old_help_mentions_--version: False
+old_help_mentions_--list-tools: False
+new_help_mentions_--version: True
+new_help_mentions_--list-tools: True
+doctor_behavior_if_missing: SKIP asserts + exit 2 INCONCLUSIVE (never fake exit 0)

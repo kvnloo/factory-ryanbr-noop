@@ -114,10 +114,52 @@ public enum NoopCLIQuery {
             .dispatch(name: request.toolName, arguments: request.arguments)
     }
 
+
+    public static func listToolsPayload() -> JSONValue {
+        .array(NoopToolDispatcher.toolNames.map { .string($0) })
+    }
+
+    public static func wantsListTools(arguments: [String]) throws -> Bool {
+        guard arguments.first == "--list-tools" else { return false }
+        guard arguments == ["--list-tools"] else {
+            throw NoopCLIQueryError.usage("query --list-tools does not accept additional arguments")
+        }
+        return true
+    }
+
+    public static func parseToolsCommand(arguments: [String]) throws {
+        guard arguments.isEmpty else {
+            throw NoopCLIQueryError.usage("tools does not accept additional arguments")
+        }
+    }
+
     public static func encodeLine(_ value: JSONValue) throws -> Data {
         var data = try JSONEncoder().encode(value)
         data.append(0x0A)
         return data
+    }
+
+
+    /// Product version printed by `noop-local-access --version` / `-V`.
+    /// SPM `Package()` has no version field, so this matches `noopLocalAccessServerVersion`.
+    public static let version = noopLocalAccessServerVersion
+
+    public static func versionLine() -> String {
+        version + "\n"
+    }
+
+    public static func wantsVersion(arguments: [String]) throws -> Bool {
+        guard let first = arguments.first, first == "--version" || first == "-V" else { return false }
+        guard arguments.count == 1 else {
+            throw NoopCLIQueryError.usage("version does not accept additional arguments")
+        }
+        return true
+    }
+
+    public static func parseVersionCommand(arguments: [String]) throws {
+        guard arguments.isEmpty else {
+            throw NoopCLIQueryError.usage("version does not accept additional arguments")
+        }
     }
 
     private static func requiredValue(_ flag: String, arguments: [String], index: inout Int) throws -> String {

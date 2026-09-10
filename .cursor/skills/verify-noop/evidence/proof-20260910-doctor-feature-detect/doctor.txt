@@ -1,0 +1,8 @@
+=== Doctor: NoopLocalAccess CLI ===
+Checking swift... Swift version 6.0.3 (swift-6.0.3-RELEASE)
+Building... OK
+Binary exists... OK
+Version output... OK (0.1.0)
+List tools... OK (6 tools)
+
+PASS: All doctor checks succeeded
