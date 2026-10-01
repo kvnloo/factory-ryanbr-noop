@@ -12,9 +12,14 @@ mutable retrospective story.
 
 The first code slice is deliberately pure and DB-free on both Swift and Kotlin.
 
-A receipt embeds the **entire preregistered P0 contract snapshot** instead of copying a few fields.
-That freezes the original hypothesis, factor/metric keys, windows, prediction direction, evidence
-gates, falsification rule, lock timestamp, and analysis recipe version inside the receipt itself.
+A receipt embeds the **entire P0 contract snapshot supplied at analysis time** instead of copying a
+few fields. That makes the receipt self-contained: hypothesis, factor/metric keys, windows, prediction
+direction, evidence gates, falsification rule, lock timestamp, and analysis recipe version travel
+together.
+
+Important boundary: this pure slice validates the snapshot's structure, but **does not prove** it was
+actually persisted before exposure. The audit guarantee only becomes real when the persistence layer
+stores the locked contract before exposure and makes later changes append-only/auditable.
 
 Observed evidence then adds:
 
@@ -53,7 +58,8 @@ when the declared evidence floor was not met.
 
 The repository's cross-platform contract requires stable platform-neutral identities for persisted
 data. Before introducing another hash algorithm or backup format, embedding the compact immutable
-contract gives an exact auditable snapshot with no new identity primitive.
+contract gives a self-contained snapshot with no new identity primitive. It is not, by itself, proof
+of pre-exposure persistence.
 
 A later persistence slice can add a canonical digest only if a concrete storage/export need justifies it.
 
@@ -63,6 +69,8 @@ Persistence is intentionally deferred until the receipt semantics are reviewed.
 
 When persisted:
 
+- the locked contract must be written before exposure and never silently overwritten
+- corrections/status transitions must be append-only or otherwise auditable
 - Swift GRDB + Android Room schemas must land in the same PR
 - migrations must be additive and covered by existing schema-oracle / migration tests
 - contract + receipt provenance must survive backup/export
