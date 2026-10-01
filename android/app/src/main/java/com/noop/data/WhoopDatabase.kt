@@ -49,11 +49,15 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DayOwnershipRow::class,
         LabMarkerRow::class,
         LiveSessionRow::class,
+        ExperimentContractEntity::class,
+        ExperimentEvidenceReceiptEntity::class,
+        ExperimentReceiptSourceEntity::class,
+        ExperimentReceiptConfounderEntity::class,
         PpgWaveformSampleEntity::class,
         V18AuxSampleEntity::class,
         AppleStepHour::class,
     ],
-    version = 35,
+    version = 36,
     // #775: ON so Room's KSP processor writes the generated schema (every table's exact `CREATE TABLE`,
     // columns in declaration order with affinity/NOT NULL/default, PK and indices) as JSON. That export
     // is what lets a plain JVM test — no device, no Robolectric — read Android's REAL schema and compare
@@ -65,6 +69,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 )
 abstract class WhoopDatabase : RoomDatabase() {
     abstract fun whoopDao(): WhoopDao
+    abstract fun experimentEvidenceDao(): ExperimentEvidenceDao
 
     /** Read-only, schema-neutral snapshots for the opt-in self-hosted push worker. */
     fun pushDao(): PushDao = PushDao(this)
@@ -73,7 +78,7 @@ abstract class WhoopDatabase : RoomDatabase() {
         const val DB_NAME = "noop_whoop.db"
         /** Room schema version — MUST equal the `@Database(version = …)` above. Surfaced in the backup
          *  manifest (#1410) so an export states its schema. Bump both together on a migration. */
-        const val SCHEMA_VERSION = 35
+        const val SCHEMA_VERSION = 36
 
         @Volatile
         private var instance: WhoopDatabase? = null
@@ -927,6 +932,50 @@ abstract class WhoopDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("DROP TABLE IF EXISTS `rawImuSample`") }
         }
 
+
+        /**
+         * v35 -> v36: immutable prospective-experiment evidence substrate.
+         *
+         * Additive only. No existing table or row is touched. Mutable experiment lifecycle state is
+         * intentionally absent: these tables store the locked evidence fields and completed receipt,
+         * while normal planned/running/completed UI state can evolve elsewhere without rewriting evidence.
+         *
+         * Twin of Swift GRDB v42-experiment-evidence.
+         */
+        internal val EXPERIMENT_EVIDENCE_MIGRATION_SQL: List<String> = listOf(
+            "CREATE TABLE IF NOT EXISTS experimentContract (" +
+                "id TEXT NOT NULL, title TEXT NOT NULL, hypothesis TEXT NOT NULL, " +
+                "factorKey TEXT NOT NULL, primaryMetricKey TEXT NOT NULL, " +
+                "baselineStartMs INTEGER NOT NULL, baselineEndMs INTEGER NOT NULL, " +
+                "exposureStartMs INTEGER NOT NULL, exposureEndMs INTEGER NOT NULL, " +
+                "outcomeStartMs INTEGER NOT NULL, outcomeEndMs INTEGER NOT NULL, " +
+                "predictedDirection TEXT NOT NULL, minimumCoverage REAL NOT NULL, " +
+                "minimumSamples INTEGER NOT NULL, falsificationRule TEXT NOT NULL, " +
+                "createdAtMs INTEGER NOT NULL, predictionLockedAtMs INTEGER NOT NULL, " +
+                "analysisRecipeVersion TEXT NOT NULL, persistedAtMs INTEGER NOT NULL, " +
+                "PRIMARY KEY(id))",
+            "CREATE TABLE IF NOT EXISTS experimentReceipt (" +
+                "id TEXT NOT NULL, contractId TEXT NOT NULL, analyzedAtMs INTEGER NOT NULL, " +
+                "persistedAtMs INTEGER NOT NULL, baselineSampleCount INTEGER NOT NULL, " +
+                "outcomeSampleCount INTEGER NOT NULL, baselineCoverage REAL NOT NULL, " +
+                "outcomeCoverage REAL NOT NULL, effectEstimate REAL, uncertaintyLower REAL, " +
+                "uncertaintyUpper REAL, result TEXT NOT NULL, PRIMARY KEY(id))",
+            "CREATE INDEX IF NOT EXISTS idx_experimentReceipt_contract " +
+                "ON experimentReceipt (contractId)",
+            "CREATE TABLE IF NOT EXISTS experimentReceiptSource (" +
+                "receiptId TEXT NOT NULL, ordinal INTEGER NOT NULL, sourceId TEXT NOT NULL, " +
+                "PRIMARY KEY(receiptId, ordinal))",
+            "CREATE TABLE IF NOT EXISTS experimentReceiptConfounder (" +
+                "receiptId TEXT NOT NULL, ordinal INTEGER NOT NULL, annotation TEXT NOT NULL, " +
+                "PRIMARY KEY(receiptId, ordinal))",
+        )
+
+        internal val MIGRATION_35_36 = object : Migration(35, 36) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                for (stmt in EXPERIMENT_EVIDENCE_MIGRATION_SQL) db.execSQL(stmt)
+            }
+        }
+
         /**
          * Every migration the builder registers, as a VALUE rather than an argument list.
          *
@@ -953,6 +1002,7 @@ abstract class WhoopDatabase : RoomDatabase() {
             MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26,
             MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30,
             MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33, MIGRATION_33_34, MIGRATION_34_35,
+            MIGRATION_35_36,
         )
 
 
