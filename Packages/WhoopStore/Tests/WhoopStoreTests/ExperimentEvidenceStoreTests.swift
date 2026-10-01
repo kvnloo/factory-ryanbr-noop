@@ -2,10 +2,7 @@ import XCTest
 @testable import WhoopStore
 
 final class ExperimentEvidenceStoreTests: XCTestCase {
-    private func contract(
-        id: String = "exp-1",
-        persistedAtMs: Int64 = 1_500
-    ) -> ExperimentContractRecord {
+    private func contract(id: String = "exp-1") -> ExperimentContractRecord {
         ExperimentContractRecord(
             id: id,
             title: "Earlier caffeine cutoff",
@@ -24,22 +21,21 @@ final class ExperimentEvidenceStoreTests: XCTestCase {
             falsificationRule: "Fail if effect is not positive at adequate coverage.",
             createdAtMs: 1_000,
             predictionLockedAtMs: 1_400,
-            analysisRecipeVersion: "sleep-eff-v1",
-            persistedAtMs: persistedAtMs
+            analysisRecipeVersion: "sleep-eff-v1"
         )
     }
 
     private func receipt(
         id: String = "receipt-1",
         contractId: String = "exp-1",
+        analyzedAtMs: Int64 = 3_100,
         effect: Double? = 0.03,
         sources: [String] = ["journal", "metric-series"]
     ) -> ExperimentEvidenceReceiptRecord {
         ExperimentEvidenceReceiptRecord(
             id: id,
             contractId: contractId,
-            analyzedAtMs: 3_100,
-            persistedAtMs: 3_200,
+            analyzedAtMs: analyzedAtMs,
             baselineSampleCount: 8,
             outcomeSampleCount: 8,
             baselineCoverage: 0.9,
@@ -76,13 +72,22 @@ final class ExperimentEvidenceStoreTests: XCTestCase {
         )
     }
 
-    func testLockedContractIsInsertOnlyAndExactReplayIsIdempotent() async throws {
+    func testLockedContractIsInsertOnlyAndExactReplayKeepsFirstPersistenceStamp() async throws {
         let store = try await WhoopStore.inMemory()
         let original = contract()
 
-        XCTAssertEqual(try await store.persistLockedExperimentContract(original), .inserted)
-        XCTAssertEqual(try await store.persistLockedExperimentContract(original), .alreadyPresent)
-        XCTAssertEqual(try await store.experimentContract(id: original.id), original)
+        XCTAssertEqual(
+            try await store.persistLockedExperimentContractForTest(original, persistedAtMs: 1_500),
+            .inserted
+        )
+        XCTAssertEqual(
+            try await store.persistLockedExperimentContractForTest(original, persistedAtMs: 1_900),
+            .alreadyPresent
+        )
+
+        let stored = try await store.experimentContract(id: original.id)
+        XCTAssertEqual(stored?.contract, original)
+        XCTAssertEqual(stored?.persistedAtMs, 1_500)
 
         let changed = ExperimentContractRecord(
             id: original.id,
@@ -102,23 +107,25 @@ final class ExperimentEvidenceStoreTests: XCTestCase {
             falsificationRule: original.falsificationRule,
             createdAtMs: original.createdAtMs,
             predictionLockedAtMs: original.predictionLockedAtMs,
-            analysisRecipeVersion: original.analysisRecipeVersion,
-            persistedAtMs: original.persistedAtMs
+            analysisRecipeVersion: original.analysisRecipeVersion
         )
 
         do {
-            _ = try await store.persistLockedExperimentContract(changed)
+            _ = try await store.persistLockedExperimentContractForTest(changed, persistedAtMs: 1_600)
             XCTFail("same id with changed evidence must fail")
         } catch {
             XCTAssertEqual(error as? ExperimentEvidenceStoreError, .contractConflict(id: original.id))
         }
-        XCTAssertEqual(try await store.experimentContract(id: original.id), original)
+        XCTAssertEqual((try await store.experimentContract(id: original.id))?.contract, original)
     }
 
-    func testLockedContractMustEnterStoreBeforeExposure() async throws {
+    func testFirstContractInsertMustHappenBeforeExposure() async throws {
         let store = try await WhoopStore.inMemory()
         do {
-            _ = try await store.persistLockedExperimentContract(contract(persistedAtMs: 2_001))
+            _ = try await store.persistLockedExperimentContractForTest(
+                contract(),
+                persistedAtMs: 2_001
+            )
             XCTFail("late preregistration must fail")
         } catch {
             XCTAssertEqual(
@@ -132,32 +139,22 @@ final class ExperimentEvidenceStoreTests: XCTestCase {
         let store = try await WhoopStore.inMemory()
 
         do {
-            _ = try await store.persistExperimentEvidenceReceipt(receipt())
+            _ = try await store.persistExperimentEvidenceReceiptForTest(
+                receipt(),
+                persistedAtMs: 3_200
+            )
             XCTFail("orphan receipt must fail")
         } catch {
             XCTAssertEqual(error as? ExperimentEvidenceStoreError, .missingContract(id: "exp-1"))
         }
 
-        _ = try await store.persistLockedExperimentContract(contract())
-        let tooEarly = ExperimentEvidenceReceiptRecord(
-            id: "early",
-            contractId: "exp-1",
-            analyzedAtMs: 2_999,
-            persistedAtMs: 3_100,
-            baselineSampleCount: 8,
-            outcomeSampleCount: 8,
-            baselineCoverage: 0.9,
-            outcomeCoverage: 0.9,
-            effectEstimate: 0.03,
-            uncertaintyLower: 0.01,
-            uncertaintyUpper: 0.05,
-            result: "supports",
-            sourceIds: ["metric-series"],
-            confounderAnnotations: []
-        )
+        _ = try await store.persistLockedExperimentContractForTest(contract(), persistedAtMs: 1_500)
 
         do {
-            _ = try await store.persistExperimentEvidenceReceipt(tooEarly)
+            _ = try await store.persistExperimentEvidenceReceiptForTest(
+                receipt(id: "early", analyzedAtMs: 2_999),
+                persistedAtMs: 3_100
+            )
             XCTFail("analysis before outcome close must fail")
         } catch {
             XCTAssertEqual(
@@ -169,23 +166,36 @@ final class ExperimentEvidenceStoreTests: XCTestCase {
 
     func testReceiptIsInsertOnlyAndChildProvenanceRoundTripsInOrder() async throws {
         let store = try await WhoopStore.inMemory()
-        _ = try await store.persistLockedExperimentContract(contract())
+        _ = try await store.persistLockedExperimentContractForTest(contract(), persistedAtMs: 1_500)
         let original = receipt()
 
-        XCTAssertEqual(try await store.persistExperimentEvidenceReceipt(original), .inserted)
-        XCTAssertEqual(try await store.persistExperimentEvidenceReceipt(original), .alreadyPresent)
-        XCTAssertEqual(try await store.experimentEvidenceReceipt(id: original.id), original)
+        XCTAssertEqual(
+            try await store.persistExperimentEvidenceReceiptForTest(original, persistedAtMs: 3_200),
+            .inserted
+        )
+        XCTAssertEqual(
+            try await store.persistExperimentEvidenceReceiptForTest(original, persistedAtMs: 3_500),
+            .alreadyPresent
+        )
+
+        let stored = try await store.experimentEvidenceReceipt(id: original.id)
+        XCTAssertEqual(stored?.receipt, original)
+        XCTAssertEqual(stored?.persistedAtMs, 3_200)
 
         do {
-            _ = try await store.persistExperimentEvidenceReceipt(receipt(effect: 0.04))
+            _ = try await store.persistExperimentEvidenceReceiptForTest(
+                receipt(effect: 0.04),
+                persistedAtMs: 3_300
+            )
             XCTFail("same receipt id with changed evidence must fail")
         } catch {
             XCTAssertEqual(error as? ExperimentEvidenceStoreError, .receiptConflict(id: original.id))
         }
 
         do {
-            _ = try await store.persistExperimentEvidenceReceipt(
-                receipt(sources: ["metric-series", "journal"])
+            _ = try await store.persistExperimentEvidenceReceiptForTest(
+                receipt(sources: ["metric-series", "journal"]),
+                persistedAtMs: 3_300
             )
             XCTFail("reordered provenance is a different receipt")
         } catch {
@@ -195,13 +205,12 @@ final class ExperimentEvidenceStoreTests: XCTestCase {
 
     func testReceiptUncertaintyMustBeAllOrNothing() async throws {
         let store = try await WhoopStore.inMemory()
-        _ = try await store.persistLockedExperimentContract(contract())
+        _ = try await store.persistLockedExperimentContractForTest(contract(), persistedAtMs: 1_500)
 
         let malformed = ExperimentEvidenceReceiptRecord(
             id: "bad-shape",
             contractId: "exp-1",
             analyzedAtMs: 3_100,
-            persistedAtMs: 3_200,
             baselineSampleCount: 8,
             outcomeSampleCount: 8,
             baselineCoverage: 0.9,
@@ -215,7 +224,10 @@ final class ExperimentEvidenceStoreTests: XCTestCase {
         )
 
         do {
-            _ = try await store.persistExperimentEvidenceReceipt(malformed)
+            _ = try await store.persistExperimentEvidenceReceiptForTest(
+                malformed,
+                persistedAtMs: 3_200
+            )
             XCTFail("half an interval must fail")
         } catch {
             XCTAssertEqual(
