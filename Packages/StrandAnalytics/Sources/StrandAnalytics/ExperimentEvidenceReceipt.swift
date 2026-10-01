@@ -2,9 +2,12 @@ import Foundation
 
 // ExperimentEvidenceReceipt.swift — auditable result for one prospective experiment.
 //
-// Pure, deterministic, DB-free. A receipt embeds the exact preregistered contract snapshot,
+// Pure, deterministic, DB-free. A receipt carries the P0 contract snapshot supplied by the caller,
 // then records only what was observed during analysis: provenance, coverage, sample counts,
 // effect/uncertainty, confounder annotations, and the evidence classification.
+//
+// Structural validation cannot prove that snapshot was actually persisted before exposure;
+// that audit guarantee belongs to the persistence layer.
 //
 // No causal inference, recommendation, scheduling, persistence, or hidden score lives here.
 
