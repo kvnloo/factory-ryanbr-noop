@@ -883,6 +883,69 @@ extension WhoopStore {
         migrator.registerMigration("v41-drop-raw-imu-sample") { db in
             try db.drop(table: "rawImuSample")
         }
+
+        // v42: durable prospective-experiment evidence.
+        //
+        // ADDITIVE ONLY. These four tables are the persistence boundary for the pure P0/P1 contracts:
+        // lock-time evidence and completed receipts are insert-only at the store API. Lifecycle status is
+        // intentionally absent because planned/running/completed is mutable workflow metadata, not part
+        // of the preregistered prediction. Twin of Room MIGRATION_35_36.
+        migrator.registerMigration("v42-experiment-evidence") { db in
+            try db.create(table: "experimentContract") { t in
+                t.column("id", .text).notNull().primaryKey()
+                t.column("title", .text).notNull()
+                t.column("hypothesis", .text).notNull()
+                t.column("factorKey", .text).notNull()
+                t.column("primaryMetricKey", .text).notNull()
+                t.column("baselineStartMs", .integer).notNull()
+                t.column("baselineEndMs", .integer).notNull()
+                t.column("exposureStartMs", .integer).notNull()
+                t.column("exposureEndMs", .integer).notNull()
+                t.column("outcomeStartMs", .integer).notNull()
+                t.column("outcomeEndMs", .integer).notNull()
+                t.column("predictedDirection", .text).notNull()
+                t.column("minimumCoverage", .double).notNull()
+                t.column("minimumSamples", .integer).notNull()
+                t.column("falsificationRule", .text).notNull()
+                t.column("createdAtMs", .integer).notNull()
+                t.column("predictionLockedAtMs", .integer).notNull()
+                t.column("analysisRecipeVersion", .text).notNull()
+                t.column("persistedAtMs", .integer).notNull()
+            }
+
+            try db.create(table: "experimentReceipt") { t in
+                t.column("id", .text).notNull().primaryKey()
+                t.column("contractId", .text).notNull()
+                t.column("analyzedAtMs", .integer).notNull()
+                t.column("persistedAtMs", .integer).notNull()
+                t.column("baselineSampleCount", .integer).notNull()
+                t.column("outcomeSampleCount", .integer).notNull()
+                t.column("baselineCoverage", .double).notNull()
+                t.column("outcomeCoverage", .double).notNull()
+                t.column("effectEstimate", .double)
+                t.column("uncertaintyLower", .double)
+                t.column("uncertaintyUpper", .double)
+                t.column("result", .text).notNull()
+            }
+            try db.execute(sql: """
+                CREATE INDEX idx_experimentReceipt_contract
+                ON experimentReceipt (contractId)
+                """)
+
+            try db.create(table: "experimentReceiptSource") { t in
+                t.column("receiptId", .text).notNull()
+                t.column("ordinal", .integer).notNull()
+                t.column("sourceId", .text).notNull()
+                t.primaryKey(["receiptId", "ordinal"])
+            }
+
+            try db.create(table: "experimentReceiptConfounder") { t in
+                t.column("receiptId", .text).notNull()
+                t.column("ordinal", .integer).notNull()
+                t.column("annotation", .text).notNull()
+                t.primaryKey(["receiptId", "ordinal"])
+            }
+        }
         return migrator
     }
 }
