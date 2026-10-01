@@ -745,3 +745,70 @@ data class V18AuxSampleEntity(
         return result
     }
 }
+
+
+/**
+ * Immutable preregistration evidence. Mutable lifecycle status intentionally does not live here:
+ * planned/running/completed/abandoned is workflow metadata, not part of the locked prediction.
+ * Twin of GRDB v42 experimentContract.
+ */
+@Entity(tableName = "experimentContract")
+data class ExperimentContractEntity(
+    @PrimaryKey
+    val id: String,
+    val title: String,
+    val hypothesis: String,
+    val factorKey: String,
+    val primaryMetricKey: String,
+    val baselineStartMs: Long,
+    val baselineEndMs: Long,
+    val exposureStartMs: Long,
+    val exposureEndMs: Long,
+    val outcomeStartMs: Long,
+    val outcomeEndMs: Long,
+    val predictedDirection: String,
+    val minimumCoverage: Double,
+    val minimumSamples: Int,
+    val falsificationRule: String,
+    val createdAtMs: Long,
+    val predictionLockedAtMs: Long,
+    val analysisRecipeVersion: String,
+    val persistedAtMs: Long,
+)
+
+/** Immutable main row for one completed evidence receipt. */
+@Entity(
+    tableName = "experimentReceipt",
+    indices = [Index(value = ["contractId"], name = "idx_experimentReceipt_contract")],
+)
+data class ExperimentEvidenceReceiptEntity(
+    @PrimaryKey
+    val id: String,
+    val contractId: String,
+    val analyzedAtMs: Long,
+    val persistedAtMs: Long,
+    val baselineSampleCount: Int,
+    val outcomeSampleCount: Int,
+    val baselineCoverage: Double,
+    val outcomeCoverage: Double,
+    val effectEstimate: Double?,
+    val uncertaintyLower: Double?,
+    val uncertaintyUpper: Double?,
+    val result: String,
+)
+
+/** Ordered source provenance for a receipt. */
+@Entity(tableName = "experimentReceiptSource", primaryKeys = ["receiptId", "ordinal"])
+data class ExperimentReceiptSourceEntity(
+    val receiptId: String,
+    val ordinal: Int,
+    val sourceId: String,
+)
+
+/** Ordered confounder annotations for a receipt. */
+@Entity(tableName = "experimentReceiptConfounder", primaryKeys = ["receiptId", "ordinal"])
+data class ExperimentReceiptConfounderEntity(
+    val receiptId: String,
+    val ordinal: Int,
+    val annotation: String,
+)
