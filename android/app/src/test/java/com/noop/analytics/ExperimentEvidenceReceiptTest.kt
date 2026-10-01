@@ -26,7 +26,7 @@ class ExperimentEvidenceReceiptTest {
         createdAtMs = 100,
         predictionLockedAtMs = 150,
         analysisRecipeVersion = "sleep-efficiency-v1",
-        status = ExperimentStatus.COMPLETED,
+        status = ExperimentStatus.PLANNED,
     )
 
     private fun validReceipt(
