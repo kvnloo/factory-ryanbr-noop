@@ -8,14 +8,14 @@ class ExternalOutcomeObservationTest {
 
     private fun validObservation(
         observedAtMs: Long = 1_000,
-        recordedAtMs: Long = 1_100,
+        ingestedAtMs: Long = 1_100,
         value: Double = 247.0,
         sourceRecordId: String? = "pvt-42",
         sessionId: String? = "session-7",
     ) = ExternalOutcomeObservation(
         id = "obs-001",
         observedAtMs = observedAtMs,
-        recordedAtMs = recordedAtMs,
+        ingestedAtMs = ingestedAtMs,
         outcomeKey = "reaction_time_ms",
         value = value,
         unit = "ms",
@@ -32,11 +32,11 @@ class ExternalOutcomeObservationTest {
         )
     }
 
-    @Test fun recorded_timestamp_cannot_precede_observation() {
+    @Test fun clock_skew_does_not_invalidate_observation() {
         assertEquals(
-            listOf(ExternalOutcomeObservationIssue.RECORDED_BEFORE_OBSERVED),
+            emptyList<ExternalOutcomeObservationIssue>(),
             ExternalOutcomeObservationValidator.issues(
-                validObservation(observedAtMs = 1_000, recordedAtMs = 999),
+                validObservation(observedAtMs = 1_200, ingestedAtMs = 1_100),
             ),
         )
     }
@@ -45,11 +45,10 @@ class ExternalOutcomeObservationTest {
         assertEquals(
             listOf(
                 ExternalOutcomeObservationIssue.INVALID_OBSERVED_AT,
-                ExternalOutcomeObservationIssue.INVALID_RECORDED_AT,
-                ExternalOutcomeObservationIssue.RECORDED_BEFORE_OBSERVED,
+                ExternalOutcomeObservationIssue.INVALID_INGESTED_AT,
             ),
             ExternalOutcomeObservationValidator.issues(
-                validObservation(observedAtMs = -1, recordedAtMs = -2),
+                validObservation(observedAtMs = -1, ingestedAtMs = -2),
             ),
         )
     }
@@ -84,7 +83,7 @@ class ExternalOutcomeObservationTest {
         val observation = ExternalOutcomeObservation(
             id = " ",
             observedAtMs = 1_000,
-            recordedAtMs = 1_100,
+            ingestedAtMs = 1_100,
             outcomeKey = "",
             value = 1.0,
             unit = " ",
@@ -108,8 +107,8 @@ class ExternalOutcomeObservationTest {
     @Test fun wire_values_are_stable() {
         assertEquals("invalid_value", ExternalOutcomeObservationIssue.INVALID_VALUE.wireValue)
         assertEquals(
-            "recorded_before_observed",
-            ExternalOutcomeObservationIssue.RECORDED_BEFORE_OBSERVED.wireValue,
+            "invalid_ingested_at",
+            ExternalOutcomeObservationIssue.INVALID_INGESTED_AT.wireValue,
         )
     }
 }
