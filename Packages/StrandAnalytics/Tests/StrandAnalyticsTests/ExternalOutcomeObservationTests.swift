@@ -6,7 +6,7 @@ final class ExternalOutcomeObservationTests: XCTestCase {
 
     private func validObservation(
         observedAtMs: Int64 = 1_000,
-        recordedAtMs: Int64 = 1_100,
+        ingestedAtMs: Int64 = 1_100,
         value: Double = 247,
         sourceRecordId: String? = "pvt-42",
         sessionId: String? = "session-7"
@@ -14,7 +14,7 @@ final class ExternalOutcomeObservationTests: XCTestCase {
         ExternalOutcomeObservation(
             id: "obs-001",
             observedAtMs: observedAtMs,
-            recordedAtMs: recordedAtMs,
+            ingestedAtMs: ingestedAtMs,
             outcomeKey: "reaction_time_ms",
             value: value,
             unit: "ms",
@@ -29,21 +29,21 @@ final class ExternalOutcomeObservationTests: XCTestCase {
         XCTAssertEqual(ExternalOutcomeObservationValidator.issues(validObservation()), [])
     }
 
-    func testRecordedTimestampCannotPrecedeObservation() {
+    func testClockSkewDoesNotInvalidateObservation() {
         XCTAssertEqual(
             ExternalOutcomeObservationValidator.issues(
-                validObservation(observedAtMs: 1_000, recordedAtMs: 999)
+                validObservation(observedAtMs: 1_200, ingestedAtMs: 1_100)
             ),
-            [.recordedBeforeObserved]
+            []
         )
     }
 
     func testTimestampsCannotBeNegative() {
         XCTAssertEqual(
             ExternalOutcomeObservationValidator.issues(
-                validObservation(observedAtMs: -1, recordedAtMs: -2)
+                validObservation(observedAtMs: -1, ingestedAtMs: -2)
             ),
-            [.invalidObservedAt, .invalidRecordedAt, .recordedBeforeObserved]
+            [.invalidObservedAt, .invalidIngestedAt]
         )
     }
 
@@ -75,7 +75,7 @@ final class ExternalOutcomeObservationTests: XCTestCase {
         let observation = ExternalOutcomeObservation(
             id: " ",
             observedAtMs: 1_000,
-            recordedAtMs: 1_100,
+            ingestedAtMs: 1_100,
             outcomeKey: "",
             value: 1,
             unit: " ",
@@ -93,8 +93,8 @@ final class ExternalOutcomeObservationTests: XCTestCase {
     func testWireValuesAreStable() {
         XCTAssertEqual(ExternalOutcomeObservationIssue.invalidValue.rawValue, "invalid_value")
         XCTAssertEqual(
-            ExternalOutcomeObservationIssue.recordedBeforeObserved.rawValue,
-            "recorded_before_observed"
+            ExternalOutcomeObservationIssue.invalidIngestedAt.rawValue,
+            "invalid_ingested_at"
         )
     }
 
