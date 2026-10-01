@@ -8,12 +8,15 @@ package com.noop.analytics
  *
  * This models only what the daily metricSeries shape cannot preserve: multiple
  * timestamped observations per day/session plus source + measurement-version provenance.
+ *
+ * observedAtMs belongs to the measurement; ingestedAtMs belongs to NOOP. Their clocks
+ * may differ, so ordering is deliberately not inferred or enforced.
  */
 
 data class ExternalOutcomeObservation(
     val id: String,
     val observedAtMs: Long,
-    val recordedAtMs: Long,
+    val ingestedAtMs: Long,
     val outcomeKey: String,
     val value: Double,
     val unit: String,
@@ -26,8 +29,7 @@ data class ExternalOutcomeObservation(
 enum class ExternalOutcomeObservationIssue(val wireValue: String) {
     EMPTY_ID("empty_id"),
     INVALID_OBSERVED_AT("invalid_observed_at"),
-    INVALID_RECORDED_AT("invalid_recorded_at"),
-    RECORDED_BEFORE_OBSERVED("recorded_before_observed"),
+    INVALID_INGESTED_AT("invalid_ingested_at"),
     EMPTY_OUTCOME_KEY("empty_outcome_key"),
     INVALID_VALUE("invalid_value"),
     EMPTY_UNIT("empty_unit"),
@@ -44,10 +46,7 @@ object ExternalOutcomeObservationValidator {
 
         if (observation.id.isBlank()) out += ExternalOutcomeObservationIssue.EMPTY_ID
         if (observation.observedAtMs < 0) out += ExternalOutcomeObservationIssue.INVALID_OBSERVED_AT
-        if (observation.recordedAtMs < 0) out += ExternalOutcomeObservationIssue.INVALID_RECORDED_AT
-        if (observation.recordedAtMs < observation.observedAtMs) {
-            out += ExternalOutcomeObservationIssue.RECORDED_BEFORE_OBSERVED
-        }
+        if (observation.ingestedAtMs < 0) out += ExternalOutcomeObservationIssue.INVALID_INGESTED_AT
         if (observation.outcomeKey.isBlank()) out += ExternalOutcomeObservationIssue.EMPTY_OUTCOME_KEY
         if (!observation.value.isFinite()) out += ExternalOutcomeObservationIssue.INVALID_VALUE
         if (observation.unit.isBlank()) out += ExternalOutcomeObservationIssue.EMPTY_UNIT
