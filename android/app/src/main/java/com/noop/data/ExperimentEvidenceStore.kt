@@ -25,20 +25,61 @@ class ExperimentEvidenceStoreException(
     val recordId: String,
 ) : IllegalStateException("$code: $recordId")
 
+data class ExperimentContractRecord(
+    val id: String,
+    val title: String,
+    val hypothesis: String,
+    val factorKey: String,
+    val primaryMetricKey: String,
+    val baselineStartMs: Long,
+    val baselineEndMs: Long,
+    val exposureStartMs: Long,
+    val exposureEndMs: Long,
+    val outcomeStartMs: Long,
+    val outcomeEndMs: Long,
+    val predictedDirection: String,
+    val minimumCoverage: Double,
+    val minimumSamples: Int,
+    val falsificationRule: String,
+    val createdAtMs: Long,
+    val predictionLockedAtMs: Long,
+    val analysisRecipeVersion: String,
+)
+
+data class PersistedExperimentContractRecord(
+    val contract: ExperimentContractRecord,
+    val persistedAtMs: Long,
+)
+
 data class ExperimentEvidenceReceiptRecord(
-    val receipt: ExperimentEvidenceReceiptEntity,
+    val id: String,
+    val contractId: String,
+    val analyzedAtMs: Long,
+    val baselineSampleCount: Int,
+    val outcomeSampleCount: Int,
+    val baselineCoverage: Double,
+    val outcomeCoverage: Double,
+    val effectEstimate: Double?,
+    val uncertaintyLower: Double?,
+    val uncertaintyUpper: Double?,
+    val result: String,
     val sourceIds: List<String>,
     val confounderAnnotations: List<String>,
+)
+
+data class PersistedExperimentEvidenceReceiptRecord(
+    val receipt: ExperimentEvidenceReceiptRecord,
+    val persistedAtMs: Long,
 )
 
 /**
  * Append-only evidence DAO.
  *
- * Raw inserts are protected so normal callers cannot bypass exact-idempotency:
- * the same id + exact same payload is a no-op, while the same id + changed evidence throws.
+ * The DAO stamps persistedAtMs itself on first insert. Same id + same evidence is an idempotent
+ * retry even later; same id + changed evidence is a hard conflict.
  *
  * persistedAtMs is local-clock provenance, not cryptographic proof against a deliberately
- * backdated system clock.
+ * backdated operating-system clock.
  */
 @Dao
 abstract class ExperimentEvidenceDao {
@@ -46,7 +87,7 @@ abstract class ExperimentEvidenceDao {
     protected abstract suspend fun insertContractRaw(row: ExperimentContractEntity): Long
 
     @Query("SELECT * FROM experimentContract WHERE id = :id")
-    abstract suspend fun experimentContract(id: String): ExperimentContractEntity?
+    protected abstract suspend fun experimentContractEntity(id: String): ExperimentContractEntity?
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     protected abstract suspend fun insertReceiptRaw(row: ExperimentEvidenceReceiptEntity): Long
@@ -67,133 +108,218 @@ abstract class ExperimentEvidenceDao {
     protected abstract suspend fun receiptConfounders(id: String): List<String>
 
     @Transaction
-    open suspend fun persistLockedExperimentContract(
-        row: ExperimentContractEntity,
-    ): ExperimentEvidenceWriteResult {
-        if (!validContractChronology(row)) {
-            throw ExperimentEvidenceStoreException(
-                ExperimentEvidenceStoreErrorCode.INVALID_CONTRACT_CHRONOLOGY,
-                row.id,
-            )
-        }
-
-        val existing = experimentContract(row.id)
-        if (existing != null) {
-            if (existing == row) return ExperimentEvidenceWriteResult.ALREADY_PRESENT
-            throw ExperimentEvidenceStoreException(
-                ExperimentEvidenceStoreErrorCode.CONTRACT_CONFLICT,
-                row.id,
-            )
-        }
-
-        val inserted = insertContractRaw(row)
-        if (inserted != -1L) return ExperimentEvidenceWriteResult.INSERTED
-
-        val raced = experimentContract(row.id)
-        if (raced == row) return ExperimentEvidenceWriteResult.ALREADY_PRESENT
-        throw ExperimentEvidenceStoreException(
-            ExperimentEvidenceStoreErrorCode.CONTRACT_CONFLICT,
-            row.id,
+    open suspend fun experimentContract(id: String): PersistedExperimentContractRecord? {
+        val row = experimentContractEntity(id) ?: return null
+        return PersistedExperimentContractRecord(
+            contract = row.toEvidenceRecord(),
+            persistedAtMs = row.persistedAtMs,
         )
     }
 
     @Transaction
-    open suspend fun experimentEvidenceReceipt(id: String): ExperimentEvidenceReceiptRecord? {
+    open suspend fun persistLockedExperimentContract(
+        record: ExperimentContractRecord,
+    ): ExperimentEvidenceWriteResult {
+        val existing = experimentContractEntity(record.id)
+        if (existing != null) {
+            if (existing.toEvidenceRecord() == record) {
+                return ExperimentEvidenceWriteResult.ALREADY_PRESENT
+            }
+            throw ExperimentEvidenceStoreException(
+                ExperimentEvidenceStoreErrorCode.CONTRACT_CONFLICT,
+                record.id,
+            )
+        }
+
+        val persistedAtMs = System.currentTimeMillis()
+        if (!validContractChronology(record, persistedAtMs)) {
+            throw ExperimentEvidenceStoreException(
+                ExperimentEvidenceStoreErrorCode.INVALID_CONTRACT_CHRONOLOGY,
+                record.id,
+            )
+        }
+
+        val inserted = insertContractRaw(record.toEntity(persistedAtMs))
+        if (inserted != -1L) return ExperimentEvidenceWriteResult.INSERTED
+
+        val raced = experimentContractEntity(record.id)
+        if (raced?.toEvidenceRecord() == record) return ExperimentEvidenceWriteResult.ALREADY_PRESENT
+        throw ExperimentEvidenceStoreException(
+            ExperimentEvidenceStoreErrorCode.CONTRACT_CONFLICT,
+            record.id,
+        )
+    }
+
+    @Transaction
+    open suspend fun experimentEvidenceReceipt(id: String): PersistedExperimentEvidenceReceiptRecord? {
         val main = receiptMain(id) ?: return null
-        return ExperimentEvidenceReceiptRecord(
-            receipt = main,
-            sourceIds = receiptSourceIds(id),
-            confounderAnnotations = receiptConfounders(id),
+        return PersistedExperimentEvidenceReceiptRecord(
+            receipt = main.toEvidenceRecord(
+                sourceIds = receiptSourceIds(id),
+                confounderAnnotations = receiptConfounders(id),
+            ),
+            persistedAtMs = main.persistedAtMs,
         )
     }
 
     @Transaction
     open suspend fun persistExperimentEvidenceReceipt(
-        row: ExperimentEvidenceReceiptEntity,
-        sourceIds: List<String>,
-        confounderAnnotations: List<String>,
+        record: ExperimentEvidenceReceiptRecord,
     ): ExperimentEvidenceWriteResult {
-        if ((row.uncertaintyLower == null) != (row.uncertaintyUpper == null)) {
+        if ((record.uncertaintyLower == null) != (record.uncertaintyUpper == null)) {
             throw ExperimentEvidenceStoreException(
                 ExperimentEvidenceStoreErrorCode.INVALID_RECEIPT_SHAPE,
-                row.id,
+                record.id,
             )
         }
 
-        val contract = experimentContract(row.contractId)
+        val existingMain = receiptMain(record.id)
+        if (existingMain != null) {
+            val existing = existingMain.toEvidenceRecord(
+                sourceIds = receiptSourceIds(record.id),
+                confounderAnnotations = receiptConfounders(record.id),
+            )
+            if (existing == record) return ExperimentEvidenceWriteResult.ALREADY_PRESENT
+            throw ExperimentEvidenceStoreException(
+                ExperimentEvidenceStoreErrorCode.RECEIPT_CONFLICT,
+                record.id,
+            )
+        }
+
+        val contract = experimentContractEntity(record.contractId)
             ?: throw ExperimentEvidenceStoreException(
                 ExperimentEvidenceStoreErrorCode.MISSING_CONTRACT,
-                row.contractId,
+                record.contractId,
             )
 
-        if (row.analyzedAtMs < contract.outcomeEndMs || row.persistedAtMs < row.analyzedAtMs) {
+        val persistedAtMs = System.currentTimeMillis()
+        if (record.analyzedAtMs < contract.outcomeEndMs || persistedAtMs < record.analyzedAtMs) {
             throw ExperimentEvidenceStoreException(
                 ExperimentEvidenceStoreErrorCode.INVALID_RECEIPT_CHRONOLOGY,
-                row.id,
+                record.id,
             )
         }
 
-        val existingMain = receiptMain(row.id)
-        if (existingMain != null) {
-            val existing = ExperimentEvidenceReceiptRecord(
-                receipt = existingMain,
-                sourceIds = receiptSourceIds(row.id),
-                confounderAnnotations = receiptConfounders(row.id),
-            )
-            val incoming = ExperimentEvidenceReceiptRecord(
-                receipt = row,
-                sourceIds = sourceIds,
-                confounderAnnotations = confounderAnnotations,
-            )
-            if (existing == incoming) return ExperimentEvidenceWriteResult.ALREADY_PRESENT
-            throw ExperimentEvidenceStoreException(
-                ExperimentEvidenceStoreErrorCode.RECEIPT_CONFLICT,
-                row.id,
-            )
-        }
-
-        val inserted = insertReceiptRaw(row)
+        val inserted = insertReceiptRaw(record.toEntity(persistedAtMs))
         if (inserted == -1L) {
-            val racedMain = receiptMain(row.id)
-            val raced = racedMain?.let {
-                ExperimentEvidenceReceiptRecord(
-                    receipt = it,
-                    sourceIds = receiptSourceIds(row.id),
-                    confounderAnnotations = receiptConfounders(row.id),
-                )
-            }
-            val incoming = ExperimentEvidenceReceiptRecord(row, sourceIds, confounderAnnotations)
-            if (raced == incoming) return ExperimentEvidenceWriteResult.ALREADY_PRESENT
+            val racedMain = receiptMain(record.id)
+            val raced = racedMain?.toEvidenceRecord(
+                sourceIds = receiptSourceIds(record.id),
+                confounderAnnotations = receiptConfounders(record.id),
+            )
+            if (raced == record) return ExperimentEvidenceWriteResult.ALREADY_PRESENT
             throw ExperimentEvidenceStoreException(
                 ExperimentEvidenceStoreErrorCode.RECEIPT_CONFLICT,
-                row.id,
+                record.id,
             )
         }
 
-        if (sourceIds.isNotEmpty()) {
+        if (record.sourceIds.isNotEmpty()) {
             insertReceiptSourcesRaw(
-                sourceIds.mapIndexed { ordinal, sourceId ->
-                    ExperimentReceiptSourceEntity(row.id, ordinal, sourceId)
+                record.sourceIds.mapIndexed { ordinal, sourceId ->
+                    ExperimentReceiptSourceEntity(record.id, ordinal, sourceId)
                 },
             )
         }
-        if (confounderAnnotations.isNotEmpty()) {
+        if (record.confounderAnnotations.isNotEmpty()) {
             insertReceiptConfoundersRaw(
-                confounderAnnotations.mapIndexed { ordinal, annotation ->
-                    ExperimentReceiptConfounderEntity(row.id, ordinal, annotation)
+                record.confounderAnnotations.mapIndexed { ordinal, annotation ->
+                    ExperimentReceiptConfounderEntity(record.id, ordinal, annotation)
                 },
             )
         }
         return ExperimentEvidenceWriteResult.INSERTED
     }
 
-    private fun validContractChronology(row: ExperimentContractEntity): Boolean =
-        row.baselineStartMs < row.baselineEndMs &&
-            row.exposureStartMs < row.exposureEndMs &&
-            row.outcomeStartMs < row.outcomeEndMs &&
-            row.baselineEndMs <= row.exposureStartMs &&
-            row.outcomeStartMs >= row.exposureEndMs &&
-            row.createdAtMs <= row.predictionLockedAtMs &&
-            row.predictionLockedAtMs <= row.persistedAtMs &&
-            row.persistedAtMs <= row.exposureStartMs
+    private fun validContractChronology(
+        record: ExperimentContractRecord,
+        persistedAtMs: Long,
+    ): Boolean =
+        record.baselineStartMs < record.baselineEndMs &&
+            record.exposureStartMs < record.exposureEndMs &&
+            record.outcomeStartMs < record.outcomeEndMs &&
+            record.baselineEndMs <= record.exposureStartMs &&
+            record.outcomeStartMs >= record.exposureEndMs &&
+            record.createdAtMs <= record.predictionLockedAtMs &&
+            record.predictionLockedAtMs <= persistedAtMs &&
+            persistedAtMs <= record.exposureStartMs
 }
+
+private fun ExperimentContractRecord.toEntity(persistedAtMs: Long) = ExperimentContractEntity(
+    id = id,
+    title = title,
+    hypothesis = hypothesis,
+    factorKey = factorKey,
+    primaryMetricKey = primaryMetricKey,
+    baselineStartMs = baselineStartMs,
+    baselineEndMs = baselineEndMs,
+    exposureStartMs = exposureStartMs,
+    exposureEndMs = exposureEndMs,
+    outcomeStartMs = outcomeStartMs,
+    outcomeEndMs = outcomeEndMs,
+    predictedDirection = predictedDirection,
+    minimumCoverage = minimumCoverage,
+    minimumSamples = minimumSamples,
+    falsificationRule = falsificationRule,
+    createdAtMs = createdAtMs,
+    predictionLockedAtMs = predictionLockedAtMs,
+    analysisRecipeVersion = analysisRecipeVersion,
+    persistedAtMs = persistedAtMs,
+)
+
+private fun ExperimentContractEntity.toEvidenceRecord() = ExperimentContractRecord(
+    id = id,
+    title = title,
+    hypothesis = hypothesis,
+    factorKey = factorKey,
+    primaryMetricKey = primaryMetricKey,
+    baselineStartMs = baselineStartMs,
+    baselineEndMs = baselineEndMs,
+    exposureStartMs = exposureStartMs,
+    exposureEndMs = exposureEndMs,
+    outcomeStartMs = outcomeStartMs,
+    outcomeEndMs = outcomeEndMs,
+    predictedDirection = predictedDirection,
+    minimumCoverage = minimumCoverage,
+    minimumSamples = minimumSamples,
+    falsificationRule = falsificationRule,
+    createdAtMs = createdAtMs,
+    predictionLockedAtMs = predictionLockedAtMs,
+    analysisRecipeVersion = analysisRecipeVersion,
+)
+
+private fun ExperimentEvidenceReceiptRecord.toEntity(
+    persistedAtMs: Long,
+) = ExperimentEvidenceReceiptEntity(
+    id = id,
+    contractId = contractId,
+    analyzedAtMs = analyzedAtMs,
+    persistedAtMs = persistedAtMs,
+    baselineSampleCount = baselineSampleCount,
+    outcomeSampleCount = outcomeSampleCount,
+    baselineCoverage = baselineCoverage,
+    outcomeCoverage = outcomeCoverage,
+    effectEstimate = effectEstimate,
+    uncertaintyLower = uncertaintyLower,
+    uncertaintyUpper = uncertaintyUpper,
+    result = result,
+)
+
+private fun ExperimentEvidenceReceiptEntity.toEvidenceRecord(
+    sourceIds: List<String>,
+    confounderAnnotations: List<String>,
+) = ExperimentEvidenceReceiptRecord(
+    id = id,
+    contractId = contractId,
+    analyzedAtMs = analyzedAtMs,
+    baselineSampleCount = baselineSampleCount,
+    outcomeSampleCount = outcomeSampleCount,
+    baselineCoverage = baselineCoverage,
+    outcomeCoverage = outcomeCoverage,
+    effectEstimate = effectEstimate,
+    uncertaintyLower = uncertaintyLower,
+    uncertaintyUpper = uncertaintyUpper,
+    result = result,
+    sourceIds = sourceIds,
+    confounderAnnotations = confounderAnnotations,
+)
