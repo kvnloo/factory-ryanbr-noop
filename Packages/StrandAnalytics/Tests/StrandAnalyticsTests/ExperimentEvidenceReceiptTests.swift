@@ -25,7 +25,7 @@ final class ExperimentEvidenceReceiptTests: XCTestCase {
             createdAtMs: 100,
             predictionLockedAtMs: 150,
             analysisRecipeVersion: "sleep-efficiency-v1",
-            status: .completed
+            status: .planned
         )
     }
 
