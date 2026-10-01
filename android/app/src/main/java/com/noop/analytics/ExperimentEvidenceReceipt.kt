@@ -6,8 +6,9 @@ package com.noop.analytics
  * Pure, deterministic, DB-free. Faithful Kotlin mirror of
  * StrandAnalytics/ExperimentEvidenceReceipt.swift.
  *
- * The exact preregistered contract is embedded in the receipt so later analysis
- * cannot silently rewrite the prediction, windows, gates, or recipe version.
+ * The receipt carries the P0 contract snapshot supplied by the caller. This pure layer
+ * validates structure but cannot prove the snapshot was actually persisted before exposure;
+ * that audit guarantee belongs to the persistence layer.
  */
 
 enum class ExperimentEvidenceResult(val wireValue: String) {
