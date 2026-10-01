@@ -6,12 +6,15 @@ import Foundation
 // metricSeries cannot represent: multiple timestamped observations per day/session,
 // explicit source identity, and the measurement protocol/version that produced the value.
 //
+// observedAtMs belongs to the measurement; ingestedAtMs belongs to NOOP. Their clocks may
+// differ, so ordering is deliberately not inferred or enforced.
+//
 // No persistence, import transport, scoring, recommendation, or causal interpretation lives here.
 
 public struct ExternalOutcomeObservation: Codable, Equatable, Sendable {
     public let id: String
     public let observedAtMs: Int64
-    public let recordedAtMs: Int64
+    public let ingestedAtMs: Int64
     public let outcomeKey: String
     public let value: Double
     public let unit: String
@@ -23,7 +26,7 @@ public struct ExternalOutcomeObservation: Codable, Equatable, Sendable {
     public init(
         id: String,
         observedAtMs: Int64,
-        recordedAtMs: Int64,
+        ingestedAtMs: Int64,
         outcomeKey: String,
         value: Double,
         unit: String,
@@ -34,7 +37,7 @@ public struct ExternalOutcomeObservation: Codable, Equatable, Sendable {
     ) {
         self.id = id
         self.observedAtMs = observedAtMs
-        self.recordedAtMs = recordedAtMs
+        self.ingestedAtMs = ingestedAtMs
         self.outcomeKey = outcomeKey
         self.value = value
         self.unit = unit
@@ -48,8 +51,7 @@ public struct ExternalOutcomeObservation: Codable, Equatable, Sendable {
 public enum ExternalOutcomeObservationIssue: String, Codable, CaseIterable, Sendable {
     case emptyID = "empty_id"
     case invalidObservedAt = "invalid_observed_at"
-    case invalidRecordedAt = "invalid_recorded_at"
-    case recordedBeforeObserved = "recorded_before_observed"
+    case invalidIngestedAt = "invalid_ingested_at"
     case emptyOutcomeKey = "empty_outcome_key"
     case invalidValue = "invalid_value"
     case emptyUnit = "empty_unit"
@@ -66,10 +68,7 @@ public enum ExternalOutcomeObservationValidator {
 
         if blank(observation.id) { out.append(.emptyID) }
         if observation.observedAtMs < 0 { out.append(.invalidObservedAt) }
-        if observation.recordedAtMs < 0 { out.append(.invalidRecordedAt) }
-        if observation.recordedAtMs < observation.observedAtMs {
-            out.append(.recordedBeforeObserved)
-        }
+        if observation.ingestedAtMs < 0 { out.append(.invalidIngestedAt) }
         if blank(observation.outcomeKey) { out.append(.emptyOutcomeKey) }
         if !observation.value.isFinite { out.append(.invalidValue) }
         if blank(observation.unit) { out.append(.emptyUnit) }
