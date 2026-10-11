@@ -17,8 +17,9 @@ documented in the [privacy inventory](PRIVACY_SECURITY.md#11-network-paths-canon
 
 The codebase is split into reusable, cross-platform Swift packages plus a thin platform-specific
 app layer. The **macOS app is the reference implementation**; **Android ships as a full app** under
-`android/`, and **iOS ships as a build-from-source target (`NOOPiOS`)** folded into main in v1.94 —
-built in Xcode, not distributed (no App Store / TestFlight, to stay anonymous). All reuse the same
+`android/`, and **iOS (`NOOPiOS`)** was folded into main in v1.94. iOS is available as an unsigned
+`.ipa` from [Releases](https://github.com/ryanbr/noop/releases), sideloaded with AltStore/SideStore,
+or built from source in Xcode; there is no App Store / TestFlight distribution. All reuse the same
 packages where they can.
 
 ```
@@ -254,11 +255,12 @@ swift run backfill
 
 ---
 
-## iOS (build-from-source only)
+## iOS (sideload or build from source)
 
-iOS ships as a **build-from-source-only** target, folded into main in v1.94. There is **no App
-Store or TestFlight build** — both require a real Apple Developer identity, which is fundamentally
-at odds with NOOP staying anonymous, so the only way to run it is to build it yourself in Xcode.
+iOS ships as an unsigned `.ipa` from [Releases](https://github.com/ryanbr/noop/releases), which
+users sign and sideload using AltStore/SideStore and their own Apple ID. Building it yourself in
+Xcode remains an option. There is no App Store or TestFlight release; see the
+[iOS installation guide](IOS.md) for the current distribution and signing steps.
 The iOS app is **newer and less battle-tested** than macOS and Android: live BLE on a real iPhone
 isn't yet fully validated. It shares the same analytics packages, so once data is in, results match
 macOS.
