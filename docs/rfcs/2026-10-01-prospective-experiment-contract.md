@@ -90,3 +90,53 @@ calendar/time-zone behavior leaks into validation.
 - any “Limitless” or “NZT” score
 
 Those are downstream layers and must not be smuggled into P0.
+
+## Evidence gate before promotion (2026-10-11)
+
+This is a **structural value contract**, not an integrated experiment. The validator accepts
+any nonblank `factorKey` or `primaryMetricKey`; it does **not** check the live Journal
+catalog or the user's available metric series. Passing unit tests alone does not show
+that an experiment can be executed or that NOOP users need this contract.
+
+### Two candidate recipes against real built-in keys
+
+| Candidate (observational, not causal) | Exact Journal canonical | Existing metric catalog key |
+| --- | --- | --- |
+| Reported late caffeine vs sleep efficiency | `Did you have caffeine late in the day?` | `sleep_efficiency` (`my-whoop`) |
+| Reported screen use in bed vs sleep performance | `Did you view a screen in bed?` | `sleep_performance` (`my-whoop`) |
+
+Sources checked at NOOP origin `e58017508d9731c51d0631fe0eb4bb1d7ea0c582`:
+`Strand/Data/JournalCatalog.swift` (`starterQuestions`) and
+`Strand/Data/MetricCatalog.swift` (`MetricCatalog` descriptors).
+The former P0 test's `caffeine_timing` is **not** a built-in Journal canonical
+(the full question text is the key), so the Swift/Kotlin fixture now uses the
+actual built-in label. A self-reported No does not establish an earlier caffeine
+cutoff or even that caffeine was consumed: this is a binary association question,
+not a dosage/timing intervention.
+
+### What the time windows can actually express
+
+- One isolated exposure followed by one later outcome fits the validator.
+- A multi-day alternation with one sleep outcome **each night** does not: the
+  first night's outcome starts before the overall exposure window ends, and P0
+  returns `outcome_starts_before_exposure_ends`. Both language tests now pin
+  that specific limitation with epoch-millisecond intervals.
+- Splitting a study into one contract per day evades the overlap constraint but
+  loses the registered *study-level* comparison/assignment and cannot by itself
+  establish an exposure/control sample gate. Do not solve this by silently
+  labelling each day an independent trial or by dropping the chronology guard.
+
+### Stopping rule / status
+
+**CHECK — hold P1/P2 promotion.** Before adding persistence, more outcome
+schemas, recommendations, or model-fitting, demonstrate two actual local,
+consented or fully synthetic end-to-end observation sets using existing
+Journal and metric storage. Record the day-boundary join, explicit Yes/No
+vs unlogged state, per-group sample and coverage denominators, confounders,
+and whether a one-exposure contract is sufficient for the real intended job.
+Do not upload personal health observations to GitHub. If the existing
+BehaviorInsights/Journal pipeline answers both questions sufficiently,
+prefer that to this additional contract.
+
+No user experiment, effect size, real-device collection, or clinical outcome
+is claimed by these tests or by this document.
