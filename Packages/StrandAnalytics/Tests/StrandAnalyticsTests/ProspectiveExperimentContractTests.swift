@@ -15,14 +15,14 @@ final class ProspectiveExperimentContractTests: XCTestCase {
     ) -> ProspectiveExperimentContract {
         ProspectiveExperimentContract(
             id: "exp-001",
-            title: "Earlier caffeine cutoff",
-            hypothesis: "Earlier caffeine cutoff improves next-night sleep efficiency.",
-            factorKey: "caffeine_timing",
+            title: "Late caffeine and sleep efficiency",
+            hypothesis: "Reporting late caffeine is associated with lower sleep efficiency.",
+            factorKey: "Did you have caffeine late in the day?",
             primaryMetricKey: "sleep_efficiency",
             baselineWindow: baselineWindow,
             exposureWindow: exposureWindow,
             outcomeWindow: outcomeWindow,
-            predictedDirection: .increase,
+            predictedDirection: .decrease,
             minimumCoverage: minimumCoverage,
             minimumSamples: minimumSamples,
             falsificationRule: "Fail if the prespecified effect is not positive at adequate coverage.",
@@ -93,6 +93,20 @@ final class ProspectiveExperimentContractTests: XCTestCase {
         XCTAssertEqual(
             ProspectiveExperimentValidator.issues(contract),
             [.invalidBaselineWindow, .invalidExposureWindow, .invalidOutcomeWindow]
+        )
+    }
+
+    // Structural counterexample: repeated late-caffeine observations over two weeks
+    // produce nightly outcomes before the 14-day exposure window has ended.
+    // P0 is a single-exposure contract, not a multi-night study scheduler.
+    func testRepeatedExposureWithNightlyOutcomesIsOutOfScope() {
+        let contract = validContract(
+            exposureWindow: .init(startMs: 1_791_417_600_000, endMs: 1_792_627_200_000),
+            outcomeWindow: .init(startMs: 1_791_532_800_000, endMs: 1_792_746_000_000)
+        )
+        XCTAssertEqual(
+            ProspectiveExperimentValidator.issues(contract),
+            [.outcomeStartsBeforeExposureEnds]
         )
     }
 

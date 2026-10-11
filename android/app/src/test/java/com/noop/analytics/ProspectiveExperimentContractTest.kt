@@ -18,14 +18,14 @@ class ProspectiveExperimentContractTest {
         outcomeWindow: ExperimentWindow = ExperimentWindow(2_100, 3_000),
     ) = ProspectiveExperimentContract(
         id = "exp-001",
-        title = "Earlier caffeine cutoff",
-        hypothesis = "Earlier caffeine cutoff improves next-night sleep efficiency.",
-        factorKey = "caffeine_timing",
+        title = "Late caffeine and sleep efficiency",
+        hypothesis = "Reporting late caffeine is associated with lower sleep efficiency.",
+        factorKey = "Did you have caffeine late in the day?",
         primaryMetricKey = "sleep_efficiency",
         baselineWindow = baselineWindow,
         exposureWindow = exposureWindow,
         outcomeWindow = outcomeWindow,
-        predictedDirection = ExperimentPredictionDirection.INCREASE,
+        predictedDirection = ExperimentPredictionDirection.DECREASE,
         minimumCoverage = minimumCoverage,
         minimumSamples = minimumSamples,
         falsificationRule = "Fail if the prespecified effect is not positive at adequate coverage.",
@@ -102,6 +102,19 @@ class ProspectiveExperimentContractTest {
                     outcomeWindow = ExperimentWindow(3_000, 3_000),
                 ),
             ),
+        )
+    }
+
+    // A multi-night intervention has sleep outcomes before the last intervention day.
+    // P0 deliberately rejects that shape; it cannot represent a repeated daily study.
+    @Test fun repeated_exposure_with_nightly_outcomes_is_out_of_scope() {
+        val contract = validContract(
+            exposureWindow = ExperimentWindow(1_791_417_600_000, 1_792_627_200_000),
+            outcomeWindow = ExperimentWindow(1_791_532_800_000, 1_792_746_000_000),
+        )
+        assertEquals(
+            listOf(ExperimentContractIssue.OUTCOME_STARTS_BEFORE_EXPOSURE_ENDS),
+            ProspectiveExperimentValidator.issues(contract),
         )
     }
 
