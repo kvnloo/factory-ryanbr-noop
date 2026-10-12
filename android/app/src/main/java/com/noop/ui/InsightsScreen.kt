@@ -90,7 +90,7 @@ import com.noop.analytics.EffectRanker
 
 /** One interrogable outcome metric: how to read it off a DailyMetric, its label,
  *  units, and whether higher is the "good" direction (drives sign-aware tint). */
-internal enum class Outcome(
+private enum class Outcome(
     val label: String,
     val outcomeName: String,
     val higherIsBetter: Boolean,
@@ -135,7 +135,7 @@ private data class Relationship(
 }
 
 /** The fully-computed insight inputs for the current data, recomputed off recentDays. */
-internal data class InsightModel(
+private data class InsightModel(
     /** behaviour question → set of days it was answered "yes". */
     val behaviours: Map<String, Set<String>>,
     /** Per behaviour, the days it was logged NO — the only legitimate control group. A day with no
@@ -1593,10 +1593,17 @@ private fun RBar(r: Double, color: Color) {
 
 // MARK: - Model building + math (simple, honest, no external analytics)
 
-/** Shape daily outcomes for effects, relationships and experiment snapshots.
- * Rest uses the already-resolved 0..100 composite; missing Rest never falls
- * back to a 0..1 efficiency fraction. Limit the result to the cached days. */
-internal fun buildModel(
+/** The Rest outcome's measured points in the cached window. Unlike a daily
+ * efficiency pick, missing composites remain missing. Pure so JVM regression
+ * tests never need to initialize Android's localized UI resources. */
+internal fun classicInsightsRestSeries(
+    days: List<DailyMetric>,
+    restCompositeByDay: Map<String, Double>,
+): List<Pair<String, Double>> =
+    days.mapNotNull { day -> restCompositeByDay[day.day]?.let { day.day to it } }
+
+/** Shape daily outcomes for effects, relationships and experiment snapshots. */
+private fun buildModel(
     days: List<DailyMetric>,
     behaviours: Map<String, Set<String>>,
     controls: Map<String, Set<String>>,
@@ -1607,9 +1614,10 @@ internal fun buildModel(
     val seriesByOutcome = mutableMapOf<Outcome, List<Pair<String, Double>>>()
     for (o in Outcome.entries) {
         // Oldest → newest; one value per day in the cached window.
-        val series = days.mapNotNull { d ->
-            val value = if (o == Outcome.Sleep) restCompositeByDay[d.day] else o.pick(d)
-            value?.let { d.day to it }
+        val series = if (o == Outcome.Sleep) {
+            classicInsightsRestSeries(days, restCompositeByDay)
+        } else {
+            days.mapNotNull { d -> o.pick(d)?.let { d.day to it } }
         }
         seriesByOutcome[o] = series
         outcomeByDay[o] = series.toMap()
