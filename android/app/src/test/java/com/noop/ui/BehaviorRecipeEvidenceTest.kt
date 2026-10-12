@@ -47,7 +47,19 @@ class BehaviorRecipeEvidenceTest {
         assertTrue(unknownDays.none { it in yes || it in no })
 
         val values = (days zip (yesValues + noValues + missingValues)).toMap()
-        return requireNotNull(EffectRanker.effect(yes, no, values, factor, metricKey))
+        val direct = requireNotNull(EffectRanker.effect(yes, no, values, factor, metricKey))
+        // Exercise the lag-selection API used by InsightsHubScreen as well.
+        // On these synthetic fixtures lag 0 beats +1/+2 on effect size.
+        val ranked = EffectRanker.rank(
+            behaviors = mapOf(factor to yes),
+            controls = mapOf(factor to no),
+            outcomeByDay = values,
+            outcome = metricKey,
+        )
+        assertEquals(1, ranked.size)
+        assertEquals(0, ranked.single().lag)
+        assertEquals(direct.delta, ranked.single().effect.delta, 1e-9)
+        return direct
     }
 
     @Test fun lateCaffeineVsSleepEfficiencyUsesExistingPaths() {
