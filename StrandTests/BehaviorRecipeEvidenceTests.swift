@@ -51,7 +51,7 @@ final class BehaviorRecipeEvidenceTests: XCTestCase {
 
         let values = Dictionary(uniqueKeysWithValues:
             zip(yesDays + noDays + unknownDays, yesValues + noValues + missingValues))
-        return try XCTUnwrap(
+        let direct = try XCTUnwrap(
             BehaviorInsights.effect(
                 behaviorDays: yes,
                 controlDays: no,
@@ -60,6 +60,19 @@ final class BehaviorRecipeEvidenceTests: XCTestCase {
                 outcome: metricKey
             )
         )
+        // Exercise the same lag-selection entry point the Insights Hub uses,
+        // not only the direct day-0 helper. On these synthetic fixtures the
+        // prespecified same-day association is stronger than lags +1/+2.
+        let ranked = EffectRanker.rank(
+            behaviors: [factor: yes],
+            controls: [factor: no],
+            outcomeByDay: values,
+            outcome: metricKey
+        )
+        XCTAssertEqual(ranked.count, 1)
+        XCTAssertEqual(ranked.first?.lag, 0)
+        XCTAssertEqual(ranked.first?.effect.delta ?? .nan, direct.delta, accuracy: 1e-9)
+        return direct
     }
 
     func testLateCaffeineAndSleepEfficiencyUseExistingPaths() throws {
