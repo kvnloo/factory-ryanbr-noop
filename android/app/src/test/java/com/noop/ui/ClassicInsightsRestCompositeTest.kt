@@ -3,24 +3,25 @@ package com.noop.ui
 import com.noop.analytics.EffectRanker
 import com.noop.data.DailyMetric
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Classic Insights Rest outcome, including experiment and relationship inputs.
- * Synthetic measurements only. No wearer data, device or clinical claim.
+ * Classic Insights Rest input to behaviour ranking, correlations and experiments.
+ * These are synthetic outcomes, never wearer or medical observations.
+ *
+ * Tests the actual pure series function the classic Insights model consumes.
+ * Avoids initializing the localized Outcome enum in a headless JVM.
  */
 class ClassicInsightsRestCompositeTest {
     private val factor = "Did you have caffeine late in the day?"
 
-    @Test fun restComparisonUsesCompositeNotTheDailyEfficiencyFraction() {
+    @Test fun rankingUsesCompositeRatherThanTheDailyEfficiencyFraction() {
         val days = (1..10).map { n ->
             DailyMetric(
                 deviceId = "whoop-test-noop",
                 day = "2026-09-%02d".format(n),
-                efficiency = 0.94,  // Deliberately unchanged across the two groups.
+                efficiency = 0.94,  // Unchanged across groups, and not the Rest score.
                 recovery = 70.0,
             )
         }
@@ -28,21 +29,13 @@ class ClassicInsightsRestCompositeTest {
         val no = days.drop(5).map { it.day }.toSet()
         val rest = days.mapIndexed { n, d -> d.day to (if (n < 5) 60.0 + n else 80.0 + n - 5) }.toMap()
 
-        val model = buildModel(
-            days = days,
-            behaviours = mapOf(factor to yes),
-            controls = mapOf(factor to no),
-            restCompositeByDay = rest,
-        )
-        assertEquals(rest, model.outcomeByDay[Outcome.Sleep])
-        assertEquals(days.map { it.day to rest.getValue(it.day) }, model.seriesByOutcome[Outcome.Sleep])
-        assertNull("Rest must never pick 0..1 efficiency", Outcome.Sleep.pick(days.first()))
+        val series = classicInsightsRestSeries(days, rest)
+        assertEquals(days.map { it.day to rest.getValue(it.day) }, series)
+        assertTrue(series.none { it.second == 0.94 })
 
-        // Both the ordinary effect cards and the experimental snapshot read
-        // model.outcomeByDay, so exercise the ranker's real input, not a parallel
-        // comparison implementation.
+        // This is the production comparison engine, not invented local math.
         val ranked = EffectRanker.rankNoLag(
-            model.behaviours, model.controls, requireNotNull(model.outcomeByDay[Outcome.Sleep]), "Rest",
+            mapOf(factor to yes), mapOf(factor to no), series.toMap(), "Rest",
         )
         assertEquals(1, ranked.size)
         assertEquals(62.0, ranked.single().meanWith, 1e-9)
@@ -52,35 +45,22 @@ class ClassicInsightsRestCompositeTest {
 
     @Test fun noCompositeMeansNoRestEvenWhenEfficiencyExists() {
         val day = DailyMetric(deviceId = "whoop-test-noop", day = "2026-09-11", efficiency = 0.99)
-        val model = buildModel(
-            days = listOf(day),
-            behaviours = emptyMap(),
-            controls = emptyMap(),
-            restCompositeByDay = emptyMap(),
-        )
-        assertTrue(model.outcomeByDay[Outcome.Sleep].isNullOrEmpty())
-        assertTrue(model.seriesByOutcome[Outcome.Sleep].isNullOrEmpty())
+        assertTrue(classicInsightsRestSeries(listOf(day), emptyMap()).isEmpty())
     }
 
-    @Test fun onlyCachedDaysAppearAndOtherDailyOutcomesAreUnchanged() {
-        val day = DailyMetric(
-            deviceId = "whoop-test-noop",
-            day = "2026-09-12",
-            efficiency = 0.91,
-            recovery = 75.0,
-            avgHrv = 48.0,
-            restingHr = 53,
+    @Test fun noOutOfWindowValuesAndNoExtraDailyFallback() {
+        val day = DailyMetric(deviceId = "whoop-test-noop", day = "2026-09-12", efficiency = 0.91)
+        val series = classicInsightsRestSeries(
+            listOf(day), mapOf(day.day to 83.0, "2026-09-13" to 99.0),
         )
-        val model = buildModel(
-            days = listOf(day),
-            behaviours = emptyMap(),
-            controls = emptyMap(),
-            restCompositeByDay = mapOf(day.day to 83.0, "2026-09-13" to 99.0),
+        assertEquals(listOf(day.day to 83.0), series)
+    }
+
+    @Test fun importOnlyRestWorksWithoutAnEfficiencyColumn() {
+        val day = DailyMetric(deviceId = "my-whoop", day = "2026-09-14")
+        assertEquals(
+            listOf(day.day to 76.0),
+            classicInsightsRestSeries(listOf(day), mapOf(day.day to 76.0)),
         )
-        assertEquals(mapOf(day.day to 83.0), model.outcomeByDay[Outcome.Sleep])
-        assertFalse(model.outcomeByDay[Outcome.Sleep]!!.containsKey("2026-09-13"))
-        assertEquals(75.0, model.outcomeByDay[Outcome.Recovery]!![day.day]!!, 1e-9)
-        assertEquals(48.0, model.outcomeByDay[Outcome.Hrv]!![day.day]!!, 1e-9)
-        assertEquals(53.0, model.outcomeByDay[Outcome.Rhr]!![day.day]!!, 1e-9)
     }
 }
