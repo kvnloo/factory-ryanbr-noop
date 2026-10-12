@@ -87,11 +87,14 @@ import kotlin.math.roundToInt
 @Composable
 fun InsightsHubScreen(vm: AppViewModel) {
     val days by vm.recentDays.collectAsState()
+    val activeStrap by vm.activeStrapIdFlow.collectAsState()
+    val strapId = activeStrap ?: vm.activeStrapId
     val hub = remember { InsightsHubViewModel() }
     val state by hub.state.collectAsState()
 
-    // Re-derive whenever the cached days change underneath (journal + dose are read via repo).
-    androidx.compose.runtime.LaunchedEffect(days) { hub.load(vm, days) }
+    // A strap re-pair can change where Rest was banked without changing the
+    // visible daily rows. Reload with an explicit active id in either case.
+    androidx.compose.runtime.LaunchedEffect(days, strapId) { hub.load(vm, days, strapId) }
 
     var outcome by remember { mutableStateOf(InsightsOutcome.Recovery) }
     val ranked = remember(state, outcome) { hub.rankFor(state, outcome) }
@@ -502,7 +505,14 @@ internal fun insightOutcomeSeries(
     val result = HashMap<String, Map<String, Double>>()
     for (outcome in InsightsOutcome.entries) {
         if (outcome == InsightsOutcome.Sleep) {
-            result[outcome.key] = restByDay
+            // resolvedSeries intentionally reads one day beyond 'to' for the
+            // wake-day fallback. Insights compares only this screen's date
+            // window; preserve interior import-only days, not spillover.
+            val from = days.minOfOrNull { it.day }
+            val to = days.maxOfOrNull { it.day }
+            result[outcome.key] = if (from == null || to == null) emptyMap() else {
+                restByDay.filterKeys { it >= from && it <= to }
+            }
         } else {
             val values = HashMap<String, Double>()
             for (day in days) outcome.pick(day)?.let { values[day.day] = it }
@@ -593,7 +603,10 @@ internal class InsightsHubViewModel {
         }
     }
 
-    suspend fun load(vm: AppViewModel, days: List<DailyMetric>) {
+    suspend fun load(vm: AppViewModel, days: List<DailyMetric>, strapDeviceId: String) {
+        // Drop the previous device/window's readout while async resolution
+        // runs, rather than displaying a stale score from another strap.
+        _state.value = Snapshot()
         // Journal → behaviour → days (imported ∪ native, native wins). BOTH answers count now, kept in
         // separate maps; the merge is what guarantees a day cannot be Yes and No for one question.
         val imported = vm.repo.journal("my-whoop", "0000-01-01", "9999-12-31")
@@ -619,7 +632,7 @@ internal class InsightsHubViewModel {
                 preferredSource = "my-whoop",
                 from = days.minOf { it.day },
                 to = days.maxOf { it.day },
-                strapDeviceId = vm.activeStrapId,
+                strapDeviceId = strapDeviceId,
             ).points.associate { it.day to it.value }
         }
         val outcomeByKey = insightOutcomeSeries(days, restByDay)
