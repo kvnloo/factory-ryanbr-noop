@@ -45,10 +45,24 @@ class InsightsHubRestSeriesTest {
         assertTrue(series["sleep_performance"].isNullOrEmpty())
     }
 
-    @Test fun theResolvedSeriesCanSupplyImportOnlyDays() {
-        val day = DailyMetric(deviceId = "whoop-test-noop", day = "2026-10-02")
-        val rest = mapOf("2026-10-01" to 81.0, "2026-10-02" to 73.0)
-        val series = insightOutcomeSeries(listOf(day), rest)
-        assertEquals(rest, series["sleep_performance"])
+    @Test fun theResolvedSeriesKeepsInteriorImportOnlyDaysButDropsSpillover() {
+        val day1 = DailyMetric(deviceId = "whoop-test-noop", day = "2026-10-01")
+        val day3 = DailyMetric(deviceId = "whoop-test-noop", day = "2026-10-03")
+        val rest = mapOf(
+            "2026-09-30" to 99.0,  // outside the cached range
+            "2026-10-01" to 81.0,
+            "2026-10-02" to 73.0,  // imported-only date within the cached range
+            "2026-10-04" to 98.0,  // resolver's one-day wake buffer
+        )
+        val series = insightOutcomeSeries(listOf(day1, day3), rest)
+        assertEquals(
+            mapOf("2026-10-01" to 81.0, "2026-10-02" to 73.0),
+            series["sleep_performance"],
+        )
+    }
+
+    @Test fun noCachedDaysCannotShowHistoricalRest() {
+        val series = insightOutcomeSeries(emptyList(), mapOf("2026-10-02" to 90.0))
+        assertTrue(series["sleep_performance"].isNullOrEmpty())
     }
 }
