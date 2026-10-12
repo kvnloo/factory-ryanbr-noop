@@ -486,8 +486,30 @@ internal enum class InsightsOutcome(
 ) {
     Recovery("Charge", "Charge", "recovery", true, DomainTheme.Charge, { it.recovery }, { "${it.roundToInt()}%" }),
     Hrv("HRV", "HRV", "hrv", true, DomainTheme.Rest, { it.avgHrv }, { "${it.roundToInt()} ms" }),
-    Sleep("Rest", "Rest", "sleep_performance", true, DomainTheme.Rest, { it.efficiency }, { "${it.roundToInt()}%" }),
+    // The Rest score is the 0..100 sleep_performance COMPOSITE, not the raw
+    // DailyMetric.efficiency (0..1). load() obtains it via resolvedSeries.
+    Sleep("Rest", "Rest", "sleep_performance", true, DomainTheme.Rest, { null }, { "${it.roundToInt()}%" }),
     Rhr("RHR", "Resting HR", "rhr", false, DomainTheme.Stress, { it.restingHr?.toDouble() }, { "${it.roundToInt()} bpm" }),
+}
+
+/** Use actual Rest composite points; never label raw efficiency as sleep_performance.
+ * Other outcomes retain their established DailyMetric projections. Kept pure so the
+ * source-selection boundary can be covered without a device, DB or Compose runtime. */
+internal fun insightOutcomeSeries(
+    days: List<DailyMetric>,
+    restByDay: Map<String, Double>,
+): Map<String, Map<String, Double>> {
+    val result = HashMap<String, Map<String, Double>>()
+    for (outcome in InsightsOutcome.entries) {
+        if (outcome == InsightsOutcome.Sleep) {
+            result[outcome.key] = restByDay
+        } else {
+            val values = HashMap<String, Double>()
+            for (day in days) outcome.pick(day)?.let { values[day.day] = it }
+            result[outcome.key] = values
+        }
+    }
+    return result
 }
 
 // MARK: - Dose card view-data
@@ -588,13 +610,19 @@ internal class InsightsHubViewModel {
         val behaviours = byBehaviour.mapValues { it.value.toSet() }
         val controls = controlsByBehaviour.mapValues { it.value.toSet() }
 
-        // Outcome series straight off the cached DailyMetric rows (the guaranteed Android source).
-        val outcomeByKey = HashMap<String, Map<String, Double>>()
-        for (o in InsightsOutcome.entries) {
-            val dict = HashMap<String, Double>()
-            for (d in days) o.pick(d)?.let { dict[d.day] = it }
-            outcomeByKey[o.key] = dict
+        // Rest is not a daily column. Read the canonical 0..100 composite from
+        // the SAME imported > computed > daily-fallback resolver as Today/Explore.
+        // Bound the query to the cached day window; do not scan all history.
+        val restByDay = if (days.isEmpty()) emptyMap() else {
+            vm.repo.resolvedSeries(
+                key = InsightsOutcome.Sleep.key,
+                preferredSource = "my-whoop",
+                from = days.minOf { it.day },
+                to = days.maxOf { it.day },
+                strapDeviceId = vm.activeStrapId,
+            ).points.associate { it.day to it.value }
         }
+        val outcomeByKey = insightOutcomeSeries(days, restByDay)
 
         // Dose rows per dosed behaviour, under the dedicated dose source; logged "yes" days
         // back-fill dose = 1, explicit dose rows override (matches the Swift contract).
