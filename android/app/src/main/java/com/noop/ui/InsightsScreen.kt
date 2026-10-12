@@ -1312,6 +1312,18 @@ private fun resolveExperimentBehaviour(candidates: List<String>, saved: String):
     return candidates.firstOrNull()
 }
 
+/** Only explicit Journal "No" days may supply a personal experiment baseline.
+ * An unanswered day is unknown and never an implicit control (#1768/#682).
+ * Reuses the same yyyy-MM-dd key ordering as the Swift Insights twin. */
+internal fun experimentExplicitNoBaselineDays(
+    outcomeDays: Map<String, Double>,
+    explicitNoDays: Set<String>,
+    before: String,
+    limit: Int,
+): List<String> =
+    outcomeDays.keys.filter { it < before && it in explicitNoDays }
+        .sorted().takeLast(limit.coerceAtLeast(1))
+
 private fun buildExperimentSnapshot(
     model: InsightModel,
     behaviours: Map<String, Set<String>>,
@@ -1328,13 +1340,14 @@ private fun buildExperimentSnapshot(
     val outcomeDays = model.outcomeByDay[outcome] ?: emptyMap()
     val loggedDays = behaviours[behaviour] ?: emptySet()
 
-    // Baseline = behaviour-ABSENT days BEFORE the start (with/without model, matching
-    // Behaviour Effects). Restricting to absent days is triage fix (c): "Baseline" vs
-    // "Intervention" is an honest present-vs-absent contrast, not a raw pre/post window.
-    val baselineKeys = outcomeDays.keys
-        .filter { it < startedDay && it !in loggedDays }
-        .sorted()
-        .takeLast(baselineDays.coerceAtLeast(1))
+    // Only explicitly answered No days form the baseline. Never-answered is
+    // unknown; treating it as No would invent control samples.
+    val baselineKeys = experimentExplicitNoBaselineDays(
+        outcomeDays = outcomeDays,
+        explicitNoDays = model.controls[behaviour].orEmpty(),
+        before = startedDay,
+        limit = baselineDays,
+    )
     // Intervention = the first `duration` outcome days from the start where the
     // behaviour WAS logged.
     val interventionWindow = outcomeDays.keys
