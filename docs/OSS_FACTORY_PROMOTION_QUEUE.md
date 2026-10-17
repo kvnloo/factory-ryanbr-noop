@@ -6,7 +6,7 @@
 
 | Priority | Source | Current evidence | Next gate |
 | --- | --- | --- | --- |
-| P0 | [iOS docs PR #45](https://github.com/kvnloo/factory-ryanbr-noop/pull/45), head `4bf7f9bcafa4a81bf6ac612df30f1f8b49b163d7` | Five distinct documentation files; restored `docs/BUILD.md` to base rather than duplicate UtkuDenizAltiok's [origin #2717](https://github.com/ryanbr/noop/pull/2717). Fork PR non-draft, exact-head Source Hygiene and i18n checks passed; Tools Python CI was pending on first read. | Recheck all exact-head checks/reviews and origin overlapping changes; separately approved origin action only. |
+| P0 | [iOS docs PR #45](https://github.com/kvnloo/factory-ryanbr-noop/pull/45), head `4bf7f9bcafa4a81bf6ac612df30f1f8b49b163d7` | Five distinct documentation files; restored `docs/BUILD.md` to base rather than duplicate UtkuDenizAltiok's [origin #2717](https://github.com/ryanbr/noop/pull/2717). Fork PR non-draft; **all 3 exact-head GitHub Actions PASS**: [Source Hygiene #39004125357](https://github.com/kvnloo/factory-ryanbr-noop/actions/runs/39004125357), [i18n Coverage #39004125361](https://github.com/kvnloo/factory-ryanbr-noop/actions/runs/39004125361), [Tools Python CI #39004125337](https://github.com/kvnloo/factory-ryanbr-noop/actions/runs/39004125337). Docs-only QA, not iOS device validation. | Recheck all exact-head checks/reviews and origin overlapping changes; separately approved origin action only. |
 
 ## Needs proof
 
