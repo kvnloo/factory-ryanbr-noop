@@ -6,6 +6,16 @@
 
 Explicit human authorization in the current conversation: promote NOOP downstream issue proposals to `ryanbr/noop`. Scope: one non-diagnostic clinician-informed UX/impact discussion, deduplicated existing-thread updates for current user-facing Insights/experiment correctness gaps, and links to the P0/P1/P2 research drafts for review. Check origin first and avoid duplicate issues; do not promote or merge held downstream code, make medical claims, copy private data, or ping maintainers. This origin-issue/comment authorization supersedes only the prior no-origin-publication hold for this bounded wave. Track exact upstream URLs here after publication.
 
+## Origin write outcome — 2026-10-17
+
+**BLOCKED: GitHub connected integration has no issue/comment write permission in `ryanbr/noop`.** Both authorized origin `create_issue` and existing-thread `add_comment_to_issue` attempted on 2026-10-17 returned GitHub HTTP 403 (`Resource not accessible by integration`). **No origin issue or comment was created.** Read-only origin audits verified the existing Rest projection and experiment control-selection code, and confirmed overlaps with upstream #735, #759, #762 and prior merged #1768.
+
+Post-ready artifacts on this canonical queue branch:
+- [Clinician-informed user-impact UX RFC](./rfcs/2026-10-17-clinician-informed-actionable-insights-ux.md) — proposed **one** non-diagnostic new origin issue, citing work #42–44, #46–49 and relevant current upstream threads.
+- [Origin promotion handoff](./rfcs/2026-10-17-upstream-issue-promotion-handoff.md) — exact issue text and two targeted existing-thread comments (#735, #759), plus dedupe/hold rules.
+
+After origin publication through an account with the required access, replace this blocker with exact origin links. This is **not** permission to create origin PRs, merge held drafts or assert clinical benefit.
+
 ## Ready for human fork review (not origin approval)
 
 | Priority | Source | Current evidence | Next gate |
