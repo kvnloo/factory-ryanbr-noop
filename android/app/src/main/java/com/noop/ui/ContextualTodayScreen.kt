@@ -178,7 +178,7 @@ internal fun ContextualTodayScreen(
         Text(
             when {
                 charge != null -> stringResource(R.string.contextual_charge_day, metric?.day ?: "")
-                metric != null -> stringResource(R.string.contextual_no_charge_day, metric.day)
+                metric != null -> stringResource(R.string.contextual_no_charge_day, metric?.day.orEmpty())
                 else -> stringResource(R.string.contextual_no_score)
             },
             style = MaterialTheme.typography.bodyMedium,

@@ -1186,7 +1186,7 @@ private fun ContextualBottomBar(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 24.dp, top = 4.dp, bottom = Metrics.space12),
+            .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = Metrics.space12),
         contentAlignment = Alignment.Center,
     ) {
         Surface(
