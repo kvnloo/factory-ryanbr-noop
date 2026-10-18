@@ -2,6 +2,10 @@
 
 > **Canonical repository-local queue (2026-10-16).** Issues are disabled in this downstream fork, so this file on `coord/lane20-promotion-queue-20261016` replaces the legacy cross-repository queue at [oss-factory #159](https://github.com/kvnloo/oss-factory/issues/159). Original issue contents and PR discussion remain archived, with authorship intact. **No automatic origin publication/merges.** NOOP uses PolyForm Noncommercial 1.0.0, not an OSI open-source license.
 
+## Origin publication decision — 2026-10-17
+
+Explicit human authorization in the current conversation: promote NOOP downstream issue proposals to `ryanbr/noop`. Scope: one non-diagnostic clinician-informed UX/impact discussion, deduplicated existing-thread updates for current user-facing Insights/experiment correctness gaps, and links to the P0/P1/P2 research drafts for review. Check origin first and avoid duplicate issues; do not promote or merge held downstream code, make medical claims, copy private data, or ping maintainers. This origin-issue/comment authorization supersedes only the prior no-origin-publication hold for this bounded wave. Track exact upstream URLs here after publication.
+
 ## Ready for human fork review (not origin approval)
 
 | Priority | Source | Current evidence | Next gate |
