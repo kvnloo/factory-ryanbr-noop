@@ -29,6 +29,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -95,6 +96,8 @@ internal fun ContextualTodayScreen(
     )
     // Deliberately not rememberSaveable or SharedPreferences: context is fleeting.
     var dismissedPrompt by remember { mutableStateOf<ContextualPrompt?>(null) }
+    // A dismissed offline hint must reappear after a connect-then-disconnect transition.
+    LaunchedEffect(prompt) { dismissedPrompt = null }
     val copy = when (prompt) {
         ContextualPrompt.ACTIVE_SESSION ->
             PromptCopy(stringResource(R.string.contextual_active_title), stringResource(R.string.contextual_active_detail), stringResource(R.string.contextual_resume))
