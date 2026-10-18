@@ -17,6 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import com.noop.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
@@ -95,15 +97,15 @@ internal fun ContextualTodayScreen(
     var dismissedPrompt by remember { mutableStateOf<ContextualPrompt?>(null) }
     val copy = when (prompt) {
         ContextualPrompt.ACTIVE_SESSION ->
-            PromptCopy("Session in progress", "Your active session is ready to resume.", "Resume")
+            PromptCopy(stringResource(R.string.contextual_active_title), stringResource(R.string.contextual_active_detail), stringResource(R.string.contextual_resume))
         ContextualPrompt.SCANNING ->
-            PromptCopy("Finding your strap", "Connection is in progress.", "Devices")
+            PromptCopy(stringResource(R.string.contextual_scanning_title), stringResource(R.string.contextual_scanning_detail), stringResource(R.string.nav_devices))
         ContextualPrompt.CONNECT_STRAP ->
-            PromptCopy("Strap offline", "Open devices to check your connection.", "Devices")
+            PromptCopy(stringResource(R.string.contextual_offline_title), stringResource(R.string.contextual_offline_detail), stringResource(R.string.nav_devices))
         ContextualPrompt.WAITING_FOR_SCORE ->
-            PromptCopy("Awaiting a score", "Recorded sleep and recovery will appear after processing.", "Sleep")
+            PromptCopy(stringResource(R.string.contextual_waiting_title), stringResource(R.string.contextual_waiting_detail), stringResource(R.string.nav_sleep))
         ContextualPrompt.REVIEW_DAY ->
-            PromptCopy("Your readings are ready", "See how your recent days compare.", "Trends")
+            PromptCopy(stringResource(R.string.contextual_review_title), stringResource(R.string.contextual_review_detail), stringResource(R.string.nav_trends))
     }
     val openPrompt: () -> Unit = when (prompt) {
         ContextualPrompt.ACTIVE_SESSION -> onResumeWorkout
@@ -130,7 +132,7 @@ internal fun ContextualTodayScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                "N O O P",
+                stringResource(R.string.app_name),
                 style = MaterialTheme.typography.labelMedium,
                 color = Palette.textSecondary,
                 letterSpacing = 2.sp,
@@ -150,7 +152,7 @@ internal fun ContextualTodayScreen(
                     ),
                 )
                 Text(
-                    if (live.connected) "Connected" else if (live.scanning) "Searching" else "Offline",
+                    if (live.connected) stringResource(R.string.contextual_status_connected) else if (live.scanning) stringResource(R.string.contextual_status_searching) else stringResource(R.string.contextual_status_offline),
                     style = MaterialTheme.typography.labelSmall,
                     color = Palette.textSecondary,
                 )
@@ -159,7 +161,7 @@ internal fun ContextualTodayScreen(
 
         Spacer(Modifier.height(52.dp))
         Text(
-            "Today",
+            stringResource(R.string.nav_today),
             style = MaterialTheme.typography.titleLarge,
             color = Palette.textSecondary,
         )
@@ -172,9 +174,9 @@ internal fun ContextualTodayScreen(
         Spacer(Modifier.height(8.dp))
         Text(
             when {
-                charge != null -> "Charge · " + (metric?.day ?: "")
-                metric != null -> "Charge not available · " + metric.day
-                else -> "No score recorded yet"
+                charge != null -> stringResource(R.string.contextual_charge_day, metric?.day ?: "")
+                metric != null -> stringResource(R.string.contextual_no_charge_day, metric.day)
+                else -> stringResource(R.string.contextual_no_score)
             },
             style = MaterialTheme.typography.bodyMedium,
             color = Palette.textTertiary,
@@ -186,13 +188,13 @@ internal fun ContextualTodayScreen(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             ContextMetric(
-                label = if (latestHeartRate != null) "Heart rate" else "Effort",
+                label = if (latestHeartRate != null) stringResource(R.string.contextual_heart_rate) else stringResource(R.string.contextual_effort),
                 value = latestHeartRate?.let { it.toString() + " bpm" } ?: effort,
                 modifier = Modifier.weight(1f),
                 onClick = if (latestHeartRate != null) onOpenLive else onOpenTrends,
             )
             ContextMetric(
-                label = "Sleep",
+                label = stringResource(R.string.nav_sleep),
                 value = sleep,
                 modifier = Modifier.weight(1f),
                 onClick = onOpenSleep,
@@ -213,7 +215,7 @@ internal fun ContextualTodayScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text(
-                            "IN CONTEXT",
+                            stringResource(R.string.contextual_in_context),
                             style = MaterialTheme.typography.labelSmall,
                             color = Palette.textTertiary,
                             letterSpacing = 1.sp,
@@ -224,7 +226,7 @@ internal fun ContextualTodayScreen(
                         ) {
                             Icon(
                                 Icons.Filled.Close,
-                                contentDescription = "Dismiss this suggestion",
+                                contentDescription = stringResource(R.string.contextual_dismiss),
                                 tint = Palette.textSecondary,
                                 modifier = Modifier.size(18.dp),
                             )
@@ -256,8 +258,8 @@ internal fun ContextualTodayScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            TextButton(onClick = onOpenJournal) { Text("Journal") }
-            TextButton(onClick = onOpenFullDashboard) { Text("Full dashboard") }
+            TextButton(onClick = onOpenJournal) { Text(stringResource(R.string.contextual_journal)) }
+            TextButton(onClick = onOpenFullDashboard) { Text(stringResource(R.string.contextual_full_dashboard)) }
         }
     }
 }

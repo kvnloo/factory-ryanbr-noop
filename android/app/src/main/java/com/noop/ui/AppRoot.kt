@@ -855,7 +855,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                                 nav.navigateTopLevel(Destination.Today.route)
                             },
                             icon = { Icon(Icons.Filled.Home, contentDescription = null) },
-                            label = { Text("Return to focus", style = NoopType.body) },
+                            label = { Text(stringResource(R.string.contextual_return_focus), style = NoopType.body) },
                             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                         )
                     }
