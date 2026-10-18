@@ -2,6 +2,16 @@
 
 > **Canonical repository-local queue (2026-10-16).** Issues are disabled in this downstream fork, so this file on `coord/lane20-promotion-queue-20261016` replaces the legacy cross-repository queue at [oss-factory #159](https://github.com/kvnloo/oss-factory/issues/159). Original issue contents and PR discussion remain archived, with authorship intact. **No automatic origin publication/merges.** NOOP uses PolyForm Noncommercial 1.0.0, not an OSI open-source license.
 
+## 2026-10-18 P0 origin snapshot refresh
+
+Origin pinned: [ryanbr/noop@8e4b0c1](https://github.com/ryanbr/noop/commit/8e4b0c16e7640607600fa6bde5424095eba6034e). Added **one sync base branch** `sync/origin-20261018-8e4b0c1` on the fork; neither `ryanbr/noop:main` nor fork `main` was changed. Matched each existing P0 source patch against the origin's current source before replaying it, and retained original fork commits as merge parents:
+
+- [#49](https://github.com/kvnloo/factory-ryanbr-noop/pull/49) — explicit-No experiment controls: head `531c3b41`, **four changed files**, Swift + Kotlin synthetic tests, new [Android](https://github.com/kvnloo/factory-ryanbr-noop/actions/runs/39111909374) and [Apple](https://github.com/kvnloo/factory-ryanbr-noop/actions/runs/39111909433) CI.
+- [#47](https://github.com/kvnloo/factory-ryanbr-noop/pull/47) — Insights Hub Rest composite: head `8d96b018`, **two changed files**, new [Android CI](https://github.com/kvnloo/factory-ryanbr-noop/actions/runs/39111950195).
+- [#48](https://github.com/kvnloo/factory-ryanbr-noop/pull/48) — classic Insights Rest composite: head `49329609`, **two changed files**, new [Android CI](https://github.com/kvnloo/factory-ryanbr-noop/actions/runs/39112037092).
+
+**QA gate:** New exact-head checks were queued or running when recorded; prior green builds only prove earlier heads. Do not mark as origin-ready until native checks complete, current-base review addresses the overlap between #48 and #49 in `InsightsScreen.kt`, and explicit approval is given for the specific upstream PRs. The origin's `InsightsView.swift`, `InsightsScreen.kt`, and `InsightsHubScreen.kt` still contained the reported P0 bugs when pinned. No new feature PRs were created; preview #50 remains non-mergeable by policy. No real wearable/clinical verification.
+
 ## Origin publication decision — 2026-10-17
 
 Explicit human authorization in the current conversation: promote NOOP downstream issue proposals to `ryanbr/noop`. Scope: one non-diagnostic clinician-informed UX/impact discussion, deduplicated existing-thread updates for current user-facing Insights/experiment correctness gaps, and links to the P0/P1/P2 research drafts for review. Check origin first and avoid duplicate issues; do not promote or merge held downstream code, make medical claims, copy private data, or ping maintainers. This origin-issue/comment authorization supersedes only the prior no-origin-publication hold for this bounded wave. Track exact upstream URLs here after publication.
@@ -27,8 +37,8 @@ After origin publication through an account with the required access, replace th
 | Priority | Source | Status / minimal gate |
 | --- | --- | --- |
 | P0 | [Journal synthetic recipes #46](https://github.com/kvnloo/factory-ryanbr-noop/pull/46), head `822e6ed05c5e9a4c2f758d18a4ded307d85e59a0` | **READY_FOR_HUMAN_REVIEW (fork only):** 5 exact-head Actions PASS: [Android build/tests](https://github.com/kvnloo/factory-ryanbr-noop/actions/runs/38221987800), [macOS build/StrandTests + iOS build](https://github.com/kvnloo/factory-ryanbr-noop/actions/runs/38221987842), [Python](https://github.com/kvnloo/factory-ryanbr-noop/actions/runs/38221987854), [i18n](https://github.com/kvnloo/factory-ryanbr-noop/actions/runs/38221987810), [Source Hygiene](https://github.com/kvnloo/factory-ryanbr-noop/actions/runs/38221987833). **iOS tests skipped**. Synthetic in-memory recipe coverage only; no real journal database or causal effect. Reviewer and authorized upstream promotion remain pending. |
-| P0 | [Hub Rest #47](https://github.com/kvnloo/factory-ryanbr-noop/pull/47), [classic Rest #48](https://github.com/kvnloo/factory-ryanbr-noop/pull/48) | **HOLD:** distinct UI paths; native build, reviewer feedback, correctness negative controls. |
-| P0 | [Explicit-No baseline #49](https://github.com/kvnloo/factory-ryanbr-noop/pull/49) | **HOLD:** native platform tests, preserve unlogged-vs-No distinctions. |
+| P0 | [Hub Rest #47](https://github.com/kvnloo/factory-ryanbr-noop/pull/47), [classic Rest #48](https://github.com/kvnloo/factory-ryanbr-noop/pull/48) | **HOLD / refreshed 2026-10-18:** current-origin merge commits in existing branches, 2 changed files each; exact-head Android CI started. Await native pass and independent review. |
+| P0 | [Explicit-No baseline #49](https://github.com/kvnloo/factory-ryanbr-noop/pull/49) | **HOLD / refreshed 2026-10-18:** 4-file Swift/Kotlin patch on pinned origin with preserved synthetic tests; exact-head Android/Apple CI started. Await platform pass and independent review. |
 | P1 | [Prospective contract #42](https://github.com/kvnloo/factory-ryanbr-noop/pull/42), [receipts #43](https://github.com/kvnloo/factory-ryanbr-noop/pull/43), [outcomes #44](https://github.com/kvnloo/factory-ryanbr-noop/pull/44) | **CHECK/HOLD:** prospective user requirement, cross-platform runtime, no causal health claims. |
 
 ## Held or superseded
