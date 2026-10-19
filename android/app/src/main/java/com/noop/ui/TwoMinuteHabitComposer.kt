@@ -62,6 +62,13 @@ internal fun TwoMinuteHabitComposer(
                 style = NoopType.footnote,
                 color = Palette.textSecondary,
             )
+            // An action from today belongs under tomorrow's wake-day key in the existing Journal.
+            // Explain the attribution; do not silently change the user's selected day or log Yes.
+            Text(
+                stringResource(R.string.habit_stack_wake_day_hint),
+                style = NoopType.footnote,
+                color = Palette.textTertiary,
+            )
             OutlinedTextField(
                 value = cue,
                 onValueChange = { cue = it },
