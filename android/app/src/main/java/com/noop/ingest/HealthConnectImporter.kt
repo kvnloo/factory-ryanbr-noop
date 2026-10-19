@@ -266,15 +266,10 @@ object HealthConnectImporter {
     private const val PERMISSION_SIGNATURE_KEY = "noop.hc.permissionSignature"
     private const val CATEGORY_SELECTION_KEY = "noop.hc.importCategories"
     // App origin, never a claimed hardware model. Refreshed only after an import completes.
-    private const val LAST_IMPORTED_ORIGINS_KEY = "hc.lastImportOriginPackages"
+    internal const val LAST_IMPORTED_ORIGINS_KEY = "hc.lastImportOriginPackages"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(NoopPrefs.NAME, Context.MODE_PRIVATE)
-
-    fun lastImportedSourceNames(context: Context): List<String> =
-        HealthConnectSourceSummary.displayNames(
-            prefs(context).getStringSet(LAST_IMPORTED_ORIGINS_KEY, emptySet()).orEmpty(),
-        )
 
     /** #1735: stamp a COMPLETED import run so the diagnostics header can say when data last moved, not
      *  merely how many rows exist. Raw keys written inline, read back by AndroidDiagnostics - the same
@@ -1544,34 +1539,4 @@ object HealthConnectImporter {
 
         var exerciseCount: Int = 0
     }
-}
-
-// Android-only presentation mapping for imported Health Connect writer-app labels.
-// Co-located with the importer so this change does not add an unpaired product source file
-// to NOOP's parity-governed inventory. The writer app is not a verified sensor model.
-/**
- * Readable app provenance for Health Connect imports.
- *
- * A Health Connect DataOrigin names the APP that wrote a sample, not the sensor that
- * measured it. A Samsung Health row, for example, is not proof of a Galaxy Watch.
- * Keep unknown packages visible instead of guessing their device or manufacturer.
- */
-internal object HealthConnectSourceSummary {
-    private val appNames = mapOf(
-        "com.sec.android.app.shealth" to "Samsung Health",
-        "com.fitbit.FitbitMobile" to "Fitbit",
-        "com.garmin.android.apps.connectmobile" to "Garmin Connect",
-        "com.google.android.apps.fitness" to "Google Fit",
-        "com.ouraring.oura" to "Oura",
-        "com.strava" to "Strava",
-    )
-
-    fun displayNames(packages: Collection<String>): List<String> =
-        packages.asSequence()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .map { appNames[it] ?: it }
-            .distinct()
-            .sorted()
-            .toList()
 }

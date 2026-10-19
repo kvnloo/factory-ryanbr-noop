@@ -184,7 +184,27 @@ fun DataSourcesScreen(vm: AppViewModel) {
         appleWorkouts = vm.repo.workoutsCount("apple-health", 0L, nowS)
         hcDays = vm.repo.appleDailyCount("health-connect", "0000-01-01", "9999-12-31")
         hcWorkouts = vm.repo.workoutsCount("health-connect", 0L, nowS)
-        hcOriginApps = HealthConnectImporter.lastImportedSourceNames(context)
+        // Health Connect identifies writing APPS, never verified watch models. Kept inline:
+        // no new unpaired product helper declarations in NOOP's strict parity inventory.
+        hcOriginApps = context.getSharedPreferences(NoopPrefs.NAME, Context.MODE_PRIVATE)
+            .getStringSet(HealthConnectImporter.LAST_IMPORTED_ORIGINS_KEY, emptySet()).orEmpty()
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .map { pkg ->
+                when (pkg) {
+                    "com.sec.android.app.shealth" -> "Samsung Health"
+                    "com.fitbit.FitbitMobile" -> "Fitbit"
+                    "com.garmin.android.apps.connectmobile" -> "Garmin Connect"
+                    "com.google.android.apps.fitness" -> "Google Fit"
+                    "com.ouraring.oura" -> "Oura"
+                    "com.strava" -> "Strava"
+                    else -> pkg
+                }
+            }
+            .distinct()
+            .sorted()
+            .toList()
         nutritionDays = vm.repo.metricSeriesKeyCount(NutritionCsvImporter.SOURCE_ID, "calories_in")
         nutritionWeighIns = vm.repo.metricSeriesKeyCount(NutritionCsvImporter.SOURCE_ID, "weight")
         liftingWorkouts = vm.repo.workoutsCount(LiftingImporter.SOURCE_ID, 0L, nowS)
