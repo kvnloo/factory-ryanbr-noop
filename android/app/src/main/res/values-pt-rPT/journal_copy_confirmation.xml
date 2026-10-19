@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="journal_copy_explainer">Há respostas do dia anterior. Copie-as apenas se ainda se aplicarem a este dia.</string>
+    <string name="journal_copy_action">Copiar respostas anteriores</string>
+</resources>
