@@ -228,6 +228,14 @@ final class ConnectionReadoutTests: XCTestCase {
             ConnectionReadout.clockLatchedLabel(deviceClockUnix: nil, strapNewestUnix: -1),
             "n/a (no banked record timestamp)")
         XCTAssertNil(ConnectionReadout.rtcWarning(deviceClockUnix: nil, strapNewestUnix: 0))
+        XCTAssertNil(ConnectionReadout.rtcWarning(deviceClockUnix: nil, strapNewestUnix: -1))
+        // Pin the exact 1972 boundary, not just a modern vs epoch-era example.
+        XCTAssertEqual(ConnectionReadout.clockLatchedLabel(deviceClockUnix: nil, strapNewestUnix: 63_071_999),
+                       "no (records dated 1970/71)")
+        XCTAssertEqual(ConnectionReadout.clockLatchedLabel(deviceClockUnix: nil, strapNewestUnix: 63_072_000),
+                       "yes")
+        XCTAssertNotNil(ConnectionReadout.rtcWarning(deviceClockUnix: nil, strapNewestUnix: 63_071_999))
+        XCTAssertNil(ConnectionReadout.rtcWarning(deviceClockUnix: nil, strapNewestUnix: 63_072_000))
         // A real correlated GET_CLOCK response wins over an unpopulated data range.
         XCTAssertEqual(
             ConnectionReadout.clockLatchedLabel(deviceClockUnix: 1_782_475_600, strapNewestUnix: 0),
