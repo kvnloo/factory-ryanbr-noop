@@ -126,11 +126,18 @@ final class JournalCatalogStore: ObservableObject {
     var customQuestions: [String] {
         get { items.filter { $0.custom }.sorted { $0.sortIndex < $1.sortIndex }.map(\.canonical) }
         set {
-            // Append any new customs as `.bool`/`.other` items; drop customs no longer present.
-            let keys = Set(newValue.map { Self.norm($0) })
-            items.removeAll { $0.custom && !keys.contains(Self.norm($0.canonical)) }
-            // Extend the seen set as we append: legacy restores can contain repeated
-            // names with different case or whitespace; each canonical key gets one item.
+            // A restore or old setter may already have persisted two alias rows.
+            // Keep the first user's custom item (including its display/group/type)
+            // and canonical question key, not just dedupe the incoming new names.
+            let keys = Set(newValue.map { Self.norm($0) }.filter { !$0.isEmpty })
+            var retainedCustom = Set<String>()
+            items.removeAll { item in
+                guard item.custom else { return false }
+                let key = Self.norm(item.canonical)
+                return !keys.contains(key) || !retainedCustom.insert(key).inserted
+            }
+            // Built-in/imported keys still block a new custom, and each accepted
+            // new alias extends the seen set before the next candidate.
             var seen = Set(items.map { Self.norm($0.canonical) })
             var next = nextSortIndex()
             for q in newValue {
