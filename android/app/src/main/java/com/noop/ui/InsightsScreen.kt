@@ -250,7 +250,11 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
             native.filter { it.day == journalDayKey(1L) }
                 .associate { it.question to it.answeredYes }
         } else emptyMap()
-        suggestedPreviousAnswers = journalCopySuggestion(dayOffset, answers, yesterdayAnswers)
+        // Imported WHOOP answers are observations too; do not offer a blanket copy that
+        // would overwrite today's imported evidence with a native row.
+        val currentRecorded = entries.filter { it.day == key }
+            .associate { it.question to it.answeredYes }
+        suggestedPreviousAnswers = journalCopySuggestion(dayOffset, currentRecorded, yesterdayAnswers)
         dayAnswers = answers
         journalLoaded = true
     }
@@ -339,18 +343,27 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
                         onClick = {
                             val pending = suggestedPreviousAnswers.toMap()
                             val selectedDay = journalDayKey(0L)
-                            scope.launch {
-                                // Do not overwrite answers manually entered since the suggestion
-                                // loaded. Copy only still-missing canonical keys.
-                                val current = vm.repo.journal(JOURNAL_DEVICE_ID, selectedDay, selectedDay)
-                                    .associate { it.question to it.answeredYes }
-                                val uncopied = missingJournalCopyAnswers(pending, current)
-                                if (uncopied.isNotEmpty()) {
-                                    vm.repo.upsertJournal(uncopied.map { (q, yes) ->
-                                        JournalEntry(JOURNAL_DEVICE_ID, selectedDay, q, yes)
-                                    })
+                            if (selectedDay != currentDayKey) {
+                                // If midnight elapsed while Insights stayed open, reload for
+                                // the new day; never copy stale suggestions into its rows.
+                                currentDayKey = selectedDay
+                            } else {
+                                scope.launch {
+                                    // Check BOTH native and imported current-day evidence at tap
+                                    // time. Copy only missing questions, never overwrite real
+                                    // Yes/No observations that arrived since the suggestion.
+                                    val native = vm.repo.journal(JOURNAL_DEVICE_ID, selectedDay, selectedDay)
+                                    val imported = vm.repo.journal("my-whoop", selectedDay, selectedDay)
+                                    val current = mergeJournalEntries(imported, native)
+                                        .associate { it.question to it.answeredYes }
+                                    val uncopied = missingJournalCopyAnswers(pending, current)
+                                    if (uncopied.isNotEmpty()) {
+                                        vm.repo.upsertJournal(uncopied.map { (q, yes) ->
+                                            JournalEntry(JOURNAL_DEVICE_ID, selectedDay, q, yes)
+                                        })
+                                    }
+                                    journalSeq++
                                 }
-                                journalSeq++
                             }
                         },
                     )

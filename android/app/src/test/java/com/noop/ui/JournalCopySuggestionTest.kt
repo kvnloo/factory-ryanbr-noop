@@ -35,4 +35,15 @@ class JournalCopySuggestionTest {
         )
         assertTrue(missingJournalCopyAnswers(candidate, candidate).isEmpty())
     }
+
+    @Test fun importedCurrentDayEvidenceSuppressesCopyOffer() {
+        val importedToday = mapOf("read" to true)
+        assertTrue(journalCopySuggestion(0L, importedToday, mapOf("read" to false)).isEmpty())
+    }
+
+    @Test fun confirmationDoesNotReplaceImportedAnswers() {
+        val candidate = mapOf("read" to false, "walk" to true)
+        val imported = mapOf("read" to true)
+        assertEquals(mapOf("walk" to true), missingJournalCopyAnswers(candidate, imported))
+    }
 }

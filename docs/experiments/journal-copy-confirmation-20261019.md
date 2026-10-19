@@ -14,3 +14,6 @@ On pinned `ryanbr/noop@8e4b0c1`, entering Insights with no native journal answer
 - Five pure JVM regression cases guard copy visibility and overwrite avoidance. Real-device interactions and iOS parity remain for review.
 
 Provenance: built on the existing NOOP Journal implementation, not a new feature claim. PolyForm Noncommercial 1.0.0 terms unchanged.
+
+- Imported WHOOP records count as already-present day evidence: never suggest a blanket copy over them, and check imports again when confirming.
+- A midnight rollover invalidates the on-screen previous-day suggestion instead of writing it into the new date.
