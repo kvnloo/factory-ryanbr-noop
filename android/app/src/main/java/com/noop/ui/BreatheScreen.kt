@@ -218,7 +218,7 @@ private fun breatheModeLabel(mode: BreatheMode): String = when (mode) {
  * rolling RMSSD show the autonomic response building. Ports BreathingView.swift.
  */
 @Composable
-fun BreatheScreen(viewModel: AppViewModel) {
+fun BreatheScreen(viewModel: AppViewModel, onOpenJournal: (() -> Unit)? = null) {
     val live by viewModel.live.collectAsStateWithLifecycle()
     val bpm by viewModel.bpm.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -740,6 +740,15 @@ fun BreatheScreen(viewModel: AppViewModel) {
             }
         }
 
+        // Manual check-in after a newly ended, non-abandoned Breathe session.
+        // Never infer that the habit happened from an old persisted RMSSD outcome.
+        // The Journal remains the source of truth for explicitly answered Yes/No days.
+        if (onOpenJournal != null && shouldOfferBreatheJournal(running, endedOutcome)) {
+            TextButton(onClick = onOpenJournal) {
+                Text(uiString(R.string.action_log_journal))
+            }
+        }
+
         // Readout tiles.
         Row(horizontalArrangement = Arrangement.spacedBy(Metrics.gap)) {
             ReadoutTile(
@@ -881,6 +890,12 @@ private fun coherenceState(rmssd: Double?): Pair<String, StrandTone> = when {
     rmssd < 80 -> "Coherent" to StrandTone.Positive
     else -> "Deep calm" to StrandTone.Positive
 }
+
+/** A check-in is offered only after a fresh 2+ minute session outcome, not on re-entry.
+ * The “—” outcome still represents a timed session with insufficient sensor data:
+ * users may self-report an action, but must not be shown a fabricated HRV response. */
+internal fun shouldOfferBreatheJournal(running: Boolean, freshOutcome: String?): Boolean =
+    !running && freshOutcome != null
 
 // MARK: - Session outcome
 

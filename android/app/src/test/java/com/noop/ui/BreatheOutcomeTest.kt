@@ -2,6 +2,8 @@ package com.noop.ui
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -49,6 +51,15 @@ class BreatheOutcomeTest {
             "-12% vs start · peak 41 ms",
             breatheOutcomeCore(baseline = 40.0, sum = 352.0, count = 10, peak = 41.0, seconds = 300),
         )
+    }
+
+    @Test
+    fun journalCheckInIsOnlyOfferedForFreshNonAbandonedSession() {
+        assertFalse(shouldOfferBreatheJournal(running = true, freshOutcome = "+18% vs start"))
+        assertFalse(shouldOfferBreatheJournal(running = false, freshOutcome = null))
+        // A completed timer without usable R-R is self-reportable but not an HRV observation.
+        assertTrue(shouldOfferBreatheJournal(running = false, freshOutcome = "—"))
+        assertTrue(shouldOfferBreatheJournal(running = false, freshOutcome = "+18% vs start"))
     }
 
     @Test

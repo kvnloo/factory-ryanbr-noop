@@ -713,7 +713,9 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                     )
                 }
                 composable(Destination.Intervals.route) { IntervalsScreen(viewModel) }
-                composable(Destination.Breathe.route) { BreatheScreen(viewModel) }
+                composable(Destination.Breathe.route) {
+                    BreatheScreen(viewModel, onOpenJournal = { nav.navigateTopLevel(Destination.Insights.route) })
+                }
                 composable(Destination.Coach.route) {
                     // A normal push, so Back returns to the conversation (#2243).
                     CoachScreen(onOpenSettings = { nav.navigate(Destination.CoachSettings.route) })
