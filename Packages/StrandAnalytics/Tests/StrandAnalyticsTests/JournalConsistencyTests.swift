@@ -70,6 +70,16 @@ final class JournalConsistencyTests: XCTestCase {
         XCTAssertEqual([capped.windowDays, capped.unloggedDays], [90, 90])
     }
 
+    func testImpossibleCalendarDatesNeverBecomeObservations() {
+        let s = summary(["2026-10-32", "2026-02-29", "2026-11-01"],
+                        [true, true, false], today: "2026-11-01")!
+        XCTAssertEqual([s.yesDays, s.noDays, s.unloggedDays], [0, 1, 6])
+        XCTAssertEqual([s.currentYesStreak, s.longestYesStreak], [0, 0])
+        XCTAssertEqual(s.todayAnswer, false)
+        XCTAssertNil(summary([], [], today: "2026-02-29"))
+        XCTAssertNil(summary([], [], today: "2026-1-1"))
+    }
+
     func testBadTodayReturnsNoSummary() {
         XCTAssertNil(summary(["2026-10-19"], [true], today: "bad"))
     }
