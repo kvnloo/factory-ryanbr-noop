@@ -219,7 +219,7 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    androidx.compose.runtime.LaunchedEffect(journalSeq, dayOffset, currentDayKey) {
+    androidx.compose.runtime.LaunchedEffect(journalSeq, dayOffset, currentDayKey, catalogItems) {
         val imported = vm.repo.journal("my-whoop", "0000-01-01", "9999-12-31")
         val native = vm.repo.journal(JOURNAL_DEVICE_ID, "0000-01-01", "9999-12-31")
         val entries = mergeJournalEntries(imported, native)
@@ -247,8 +247,13 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
         // A historical row would otherwise be fabricated as though the user observed today.
         // Only the explicit Copy button below can persist a fresh day's answers.
         val yesterdayAnswers = if (dayOffset == 0L) {
-            native.filter { it.day == journalDayKey(1L) }
-                .associate { it.question to it.answeredYes }
+            // A numeric journal row also says answeredYes=true, but without its actual
+            // numericValue copying that bit would invent a dose-independent observation.
+            // Only current, visible boolean prompts may be copied after confirmation.
+            val eligible = resolveJournalItems(importedQuestions, catalogItems)
+                .filterNot { it.kind.isNumeric }
+                .mapTo(hashSetOf<String>()) { normJournalKey(it.canonical) }
+            previousBooleanJournalAnswers(native, journalDayKey(1L), eligible)
         } else emptyMap()
         // Imported WHOOP answers are observations too; do not offer a blanket copy that
         // would overwrite today's imported evidence with a native row.
@@ -378,8 +383,8 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
             catalogItems = next
         }
         JournalLogCard(
-            // Include hidden entries in the card's model, not in its normal view: edit mode
-            // can then offer Restore, and the habit composer detects previously hidden keys.
+            // Keep hidden items in the model for Restore and duplicate detection;
+            // JournalLogCard filters them outside edit mode.
             items = resolveJournalItems(importedQuestions, catalogItems, includeHidden = true),
             answers = dayAnswers,
             numericAnswers = dayNumeric,
