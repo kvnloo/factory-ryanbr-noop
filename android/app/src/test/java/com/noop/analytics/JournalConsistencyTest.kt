@@ -75,6 +75,18 @@ class JournalConsistencyTest {
         assertEquals(listOf(90, 90), listOf(capped.windowDays, capped.unloggedDays))
     }
 
+    @Test fun impossibleCalendarDatesNeverBecomeObservations() {
+        val s = summary(
+            listOf("2026-10-32", "2026-02-29", "2026-11-01"),
+            listOf(true, true, false), today = "2026-11-01",
+        )!!
+        assertEquals(listOf(0, 1, 6), listOf(s.yesDays, s.noDays, s.unloggedDays))
+        assertEquals(listOf(0, 0), listOf(s.currentYesStreak, s.longestYesStreak))
+        assertEquals(false, s.todayAnswer)
+        assertNull(summary(emptyList(), emptyList(), today = "2026-02-29"))
+        assertNull(summary(emptyList(), emptyList(), today = "2026-1-1"))
+    }
+
     @Test fun badTodayReturnsNoSummary() {
         assertNull(summary(listOf("2026-10-19"), listOf(true), today = "bad"))
     }
