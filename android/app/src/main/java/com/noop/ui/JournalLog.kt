@@ -245,9 +245,32 @@ fun JournalLogCard(
                     style = NoopType.footnote,
                     color = Palette.textTertiary,
                 )
+                // A tiny habit remains a plain yes/no Journal row. Its quick check-in does not
+                // synthesize No from an unanswered day or create a second habit datastore.
+                val tinyHabits = items.filter {
+                    !it.hidden && !it.kind.isNumeric && TinyHabitJournal.isQuestion(it.canonical)
+                }
+                if (!editing && tinyHabits.isNotEmpty()) {
+                    Text(
+                        uiString(R.string.l10n_tiny_habit_header_20261019),
+                        style = NoopType.headline,
+                        color = Palette.textPrimary,
+                    )
+                    tinyHabits.forEach { item ->
+                        TinyHabitCheckInRow(
+                            item = item,
+                            answer = answers[item.canonical],
+                            onAnswer = { onAnswer(item.canonical, it) },
+                            onClear = { onClear(item.canonical) },
+                        )
+                    }
+                    JournalDivider()
+                }
                 // Grouped, collapsible blocks in the fixed display order. Empty groups hide outside edit.
                 JournalGroup.displayOrder.forEach { group ->
-                    val groupItems = items.filter { it.group == group }
+                    val groupItems = items.filter {
+                        it.group == group && (editing || it !in tinyHabits)
+                    }
                         .sortedWith(compareBy({ it.sortIndex }, { it.display }))
                     if (groupItems.isNotEmpty() || editing) {
                         JournalGroupBlock(
@@ -268,6 +291,10 @@ fun JournalLogCard(
                     }
                 }
                 JournalDivider()
+                if (!editing) {
+                    JournalAddTinyHabitRow(onAddCustom = onAddCustom)
+                    JournalDivider()
+                }
                 JournalAddRow(onAddCustom = onAddCustom)
             }
         }
@@ -470,6 +497,83 @@ private fun JournalRenameDialog(
         confirmButton = { Text(uiString(R.string.l10n_journal_log_save_efc007a3), color = Palette.accent, modifier = Modifier.clickable { onSave(draft) }.padding(8.dp)) },
         dismissButton = { Text(uiString(R.string.l10n_journal_log_cancel_77dfd213), color = Palette.textSecondary, modifier = Modifier.clickable { onDismiss() }.padding(8.dp)) },
     )
+}
+
+/** The same nullable Journal answer contract: true=done, false=skipped, absent=not recorded. */
+@Composable
+private fun TinyHabitCheckInRow(
+    item: JournalCatalogItem,
+    answer: Boolean?,
+    onAnswer: (Boolean) -> Unit,
+    onClear: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(item.display, style = NoopType.body, color = Palette.textPrimary)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            item {
+                JournalChip(uiString(R.string.l10n_tiny_habit_done_20261019), selected = answer == true) {
+                    if (answer == true) onClear() else onAnswer(true)
+                }
+            }
+            item {
+                JournalChip(uiString(R.string.l10n_tiny_habit_skipped_20261019), selected = answer == false) {
+                    if (answer == false) onClear() else onAnswer(false)
+                }
+            }
+            item {
+                JournalChip(uiString(R.string.l10n_tiny_habit_unanswered_20261019), selected = answer == null) {
+                    if (answer != null) onClear()
+                }
+            }
+        }
+    }
+}
+
+/** Create a cue-linked prompt with the existing custom Journal catalog, not a second habit engine. */
+@Composable
+private fun JournalAddTinyHabitRow(onAddCustom: (String, JournalKind, JournalGroup) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    var cue by remember { mutableStateOf("") }
+    var action by remember { mutableStateOf("") }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        JournalChip(uiString(R.string.l10n_tiny_habit_create_20261019), selected = expanded) {
+            expanded = !expanded
+        }
+        if (expanded) {
+            Text(
+                uiString(R.string.l10n_tiny_habit_tomorrow_hint_20261019),
+                style = NoopType.footnote,
+                color = Palette.textTertiary,
+            )
+            OutlinedTextField(
+                value = cue,
+                onValueChange = { cue = it },
+                label = { Text(uiString(R.string.l10n_tiny_habit_cue_20261019)) },
+                singleLine = true,
+                textStyle = NoopType.body,
+                colors = journalFieldColors(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = action,
+                onValueChange = { action = it },
+                label = { Text(uiString(R.string.l10n_tiny_habit_action_20261019)) },
+                singleLine = true,
+                textStyle = NoopType.body,
+                colors = journalFieldColors(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            val question = TinyHabitJournal.question(cue, action)
+            JournalChip(uiString(R.string.l10n_tiny_habit_add_20261019), selected = question != null) {
+                if (question != null) {
+                    onAddCustom(question, JournalKind.Bool, JournalGroup.Behaviour)
+                    cue = ""
+                    action = ""
+                    expanded = false
+                }
+            }
+        }
+    }
 }
 
 /** The add-a-custom-item row: text field + a Yes/No↔Number type toggle + a group picker + Add. */
