@@ -359,6 +359,10 @@ object HealthConnectImporter {
         // #528: skip our own writes on import (see readAll / isSelfWritten).
         val selfPackage = context.packageName
         val selectedRecordTypes = readableRecordTypes(effectiveCategories, granted)
+        // An empty successful scan is different from an import where every selected HC read threw.
+        // Only completed reads can count as a successful auto-sync (#55).
+        var selectedReadsAttempted = 0
+        var selectedReadsCompleted = 0
 
         // A granted permission can outlive the category selection that originally requested it. Gate
         // on BOTH here so switching a category off stops its reads immediately without requiring the
@@ -369,7 +373,10 @@ object HealthConnectImporter {
             onRecord: (T) -> Unit,
         ): Boolean {
             if (type !in selectedRecordTypes) return false
-            return readAll(client, type, range, selfPackage, onRecord)
+            selectedReadsAttempted++
+            val completed = readAll(client, type, range, selfPackage, onRecord)
+            if (completed) selectedReadsCompleted++
+            return completed
         }
 
         // Per-day accumulators. Keyed by "YYYY-MM-DD" (local).
@@ -700,6 +707,11 @@ object HealthConnectImporter {
             }
         } catch (e: Exception) {
             return ImportSummary.failure(SOURCE, "Health Connect read failed: ${e.message}")
+        }
+        if (everySelectedHealthReadFailed(selectedReadsAttempted, selectedReadsCompleted)) {
+            // readAll catches individual SDK/permission failures so other types can succeed.
+            // When NONE completes, do not stamp an empty import as a successful sync.
+            return ImportSummary.failure(SOURCE, "Every selected Health Connect record read failed.")
         }
 
         // Zero-fill the whole hydration window and write it, BEFORE the "nothing found" bail below:
@@ -1135,6 +1147,10 @@ object HealthConnectImporter {
      */
     internal fun isSelfWritten(originPackage: String, selfPackage: String): Boolean =
         selfPackage.isNotEmpty() && originPackage == selfPackage
+
+    /** A selected type with zero matching records is a completed read, not a failed read. */
+    internal fun everySelectedHealthReadFailed(attempted: Int, completed: Int): Boolean =
+        attempted > 0 && completed == 0
 
     /**
      * #1002: which local civil day a record belongs to, keyed by the offset the record was RECORDED
