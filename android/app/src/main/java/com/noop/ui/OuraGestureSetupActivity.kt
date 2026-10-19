@@ -21,6 +21,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import com.noop.ble.gesture.OuraTapDetector
 import com.noop.NoopApplication
+import com.noop.R
 import com.noop.ble.OuraZ0LiveHandoff
 
 /**
@@ -177,14 +178,14 @@ class OuraGestureSetupActivity : Activity() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val mgr = getSystemService(NotificationManager::class.java)
         val channel = "oura_z0live_setup"
-        mgr.createNotificationChannel(NotificationChannel(channel, "Oura gesture", NotificationManager.IMPORTANCE_HIGH))
+        mgr.createNotificationChannel(NotificationChannel(channel, getString(R.string.oura_z0live_notification_channel), NotificationManager.IMPORTANCE_HIGH))
         val pending = PendingIntent.getActivity(this, 317,
             OuraZ0LiveHandoff.visibleControlsIntent(),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         mgr.notify(317, Notification.Builder(this, channel)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("Oura gesture detected")
-            .setContentText("Tap to open z0live controls; microphone is not started automatically.")
+            .setContentTitle(getString(R.string.oura_z0live_notification_title))
+            .setContentText(getString(R.string.oura_z0live_notification_body))
             .setContentIntent(pending).setAutoCancel(true).build())
     }
 
