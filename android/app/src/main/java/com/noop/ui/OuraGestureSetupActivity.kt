@@ -1,4 +1,4 @@
-package com.noop.oura
+package com.noop.ui
 
 import android.Manifest
 import android.app.Activity
@@ -19,9 +19,9 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.noop.ble.gesture.OuraTapDetector
 import com.noop.NoopApplication
 import com.noop.ble.OuraZ0LiveHandoff
-import com.noop.ui.MainActivity
 
 /**
  * Opt-in bounded gesture onboarding on NOOP's already-connected Oura Gen 3 BLE source.

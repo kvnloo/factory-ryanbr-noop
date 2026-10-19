@@ -1,4 +1,4 @@
-package com.noop.oura
+package com.noop.ble.gesture
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

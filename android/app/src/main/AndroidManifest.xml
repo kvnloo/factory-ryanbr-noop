@@ -170,7 +170,7 @@
         tools:targetApi="34">
 
         <!-- Explicit z0live onboarding target: visible user-confirmed BLE sampling only. -->
-        <activity android:name="com.noop.oura.OuraGestureSetupActivity"
+        <activity android:name="com.noop.ui.OuraGestureSetupActivity"
             android:exported="true" android:excludeFromRecents="true"
             android:label="Oura gesture setup" android:theme="@style/Theme.NOOP" />
 

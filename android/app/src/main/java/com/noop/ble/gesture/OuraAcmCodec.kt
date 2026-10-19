@@ -1,4 +1,4 @@
-package com.noop.oura
+package com.noop.ble.gesture
 
 /**
  * Candidate Oura Gen 3 realtime 0x33 accelerometer wire format, independently

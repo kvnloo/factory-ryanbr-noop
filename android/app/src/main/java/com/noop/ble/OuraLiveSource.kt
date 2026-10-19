@@ -20,8 +20,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import com.noop.oura.OuraAcmCodec
-import com.noop.oura.OuraTapDetector
+import com.noop.ble.gesture.OuraAcmCodec
+import com.noop.ble.gesture.OuraTapDetector
 import android.os.ParcelUuid
 import com.noop.data.OuraStreamMapping
 import com.noop.data.StreamBatch

@@ -1,4 +1,4 @@
-package com.noop.oura
+package com.noop.ble.gesture
 
 import kotlin.math.abs
 import kotlin.math.sqrt

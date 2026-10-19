@@ -628,7 +628,7 @@ class SourceCoordinator(
 
     fun startActiveOuraGestureCapture(
         seconds: Int,
-        onGesture: (com.noop.oura.OuraTapDetector.Gesture) -> Unit,
+        onGesture: (com.noop.ble.gesture.OuraTapDetector.Gesture) -> Unit,
     ): Boolean = (activeSource as? OuraLiveSource)?.startGestureCapture(seconds, onGesture) ?: false
 
     fun stopActiveOuraGestureCapture() {

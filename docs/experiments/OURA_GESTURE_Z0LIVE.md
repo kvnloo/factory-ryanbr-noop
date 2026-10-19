@@ -63,6 +63,6 @@ No source code copied from reverse-engineering references.
 
 ## Verification
 
-- Kotlin unit tests: `cd android && ./gradlew testFullDebugUnitTest --tests 'com.noop.oura.Oura*Test'`
+- Kotlin unit tests: `cd android && ./gradlew testFullDebugUnitTest --tests 'com.noop.ble.gesture.Oura*Test'`
 - Android compilation: `cd android && ./gradlew compileFullDebugKotlin`
 - Physical BLE + z0live session qualification: **NOT RUN**.
