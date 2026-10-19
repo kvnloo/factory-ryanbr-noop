@@ -2859,4 +2859,13 @@
     <string name="raw_diag_ecg_probe_running">Une capture est peut-être encore active sur ce bracelet. Le verdict est écrit dans le strap log.</string>
     <string name="today_customize_live_session_availability">Apparaît aujourd’hui si les sessions en direct sont activées dans Paramètres ou si une session est active.</string>
     <string name="l10n_app_changelog_today_your_way_heart_rate_any_5e1308b3">Aujourd\'hui à votre façon, fréquence cardiaque lisible par toute application, et l\'italien</string>
+    <string name="l10n_tiny_habit_header_20261019">Habitudes de 2 minutes</string>
+    <string name="l10n_tiny_habit_done_20261019">Fait</string>
+    <string name="l10n_tiny_habit_skipped_20261019">Non fait</string>
+    <string name="l10n_tiny_habit_unanswered_20261019">Non renseigné</string>
+    <string name="l10n_tiny_habit_create_20261019">Créer une habitude de 2 minutes</string>
+    <string name="l10n_tiny_habit_cue_20261019">Après avoir…</string>
+    <string name="l10n_tiny_habit_action_20261019">Je vais…</string>
+    <string name="l10n_tiny_habit_add_20261019">Ajouter une habitude</string>
+    <string name="l10n_tiny_habit_tomorrow_hint_20261019">Pour noter une action faite aujourd’hui, sélectionnez Demain ci-dessus pour la relier au lendemain matin.</string>
 </resources>
