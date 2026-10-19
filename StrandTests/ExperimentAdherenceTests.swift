@@ -62,4 +62,17 @@ final class ExperimentAdherenceTests: XCTestCase {
             yesDays: [], startedDay: "2026-10-19",
             today: "2026-10-19", durationDays: 14), 0)
     }
+
+    func testSensorReadingsAfterDeadlineDoNotExtendExperiment() {
+        let observedDays = ["2026-10-14", "2026-10-15", "2026-10-17",
+                            "2026-10-21", "2026-10-22", "2026-10-30", "invalid"]
+        let eligible = observedDays.filter {
+            ExperimentAdherence.includes($0, startedDay: "2026-10-15",
+                                         today: "2026-10-30", durationDays: 7)
+        }
+        XCTAssertEqual(eligible, ["2026-10-15", "2026-10-17", "2026-10-21"])
+        XCTAssertFalse(ExperimentAdherence.includes(
+            "2026-10-21", startedDay: "2026-10-15", today: "2026-10-19", durationDays: 7))
+    }
+
 }
