@@ -481,7 +481,7 @@ class OuraLiveSource(
         tapCaptureUntilMs = SystemClock.elapsedRealtime() + seconds * 1000L
         lastWriteAccepted = false
         write(OuraCommand("gesture_acm_on", OuraAcmCodec.enableForSeconds(seconds)))
-        if (!lastWriteAccepted) {
+        if (lastWriteAccepted != true) {
             tapSink = null
             tapCaptureUntilMs = 0
             tapEpoch++
