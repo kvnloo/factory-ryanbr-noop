@@ -42,6 +42,9 @@ struct JournalLogCard: View {
     @State private var customDraft = ""
     @State private var customIsNumeric = false
     @State private var customGroup: JournalGroup = .other
+    @State private var habitComposerExpanded = false
+    @State private var habitCue = ""
+    @State private var habitAction = ""
     /// Edit mode: swaps the answer controls for rename/group/convert/remove and reveals hidden items.
     @State private var editing = false
     /// Collapsed groups (persisted per group).
@@ -125,6 +128,10 @@ struct JournalLogCard: View {
                         groupBlock(group)
                     }
 
+                    if !editing {
+                        Divider().overlay(StrandPalette.hairline)
+                        twoMinuteHabitComposer
+                    }
                     Divider().overlay(StrandPalette.hairline)
                     addRow
                 }
@@ -311,6 +318,55 @@ struct JournalLogCard: View {
         }
         .padding(NoopMetrics.space4)
         .frame(minWidth: 320)
+    }
+
+    // MARK: - Two-minute habit (same canonical Journal question as Android)
+
+    private var twoMinuteHabitComposer: some View {
+        let proposal = twoMinuteHabitQuestion(habitCue, habitAction)
+        // Include hidden questions: addCustom would reject the duplicate, so the
+        // composer must not imply success for a previously hidden custom item.
+        let exists = proposal.map { question in
+            catalog.resolvedItems(imported: importedQuestions, includeHidden: true)
+                .contains { JournalCatalogStore.norm($0.canonical) == JournalCatalogStore.norm(question) }
+        } ?? false
+
+        return DisclosureGroup(isExpanded: $habitComposerExpanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Choose a cue and a tiny action. Save as a Journal question, then mark Yes or No yourself.")
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                TextField("After this cue", text: $habitCue)
+                    .textFieldStyle(.roundedBorder)
+                TextField("Do this small action", text: $habitAction)
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("Add to Journal") {
+                        guard let question = proposal, !exists else { return }
+                        // Adds metadata only. Explicit Journal taps own Yes/No.
+                        catalog.addCustom(question, kind: .bool, group: .behaviour)
+                        var collapsed = collapsedGroups
+                        collapsed.remove(JournalGroup.behaviour.rawValue)
+                        collapsedGroupsRaw = collapsed.sorted().joined(separator: ",")
+                        habitCue = ""
+                        habitAction = ""
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(proposal == nil || exists)
+                    if exists {
+                        Text("Already in your Journal")
+                            .font(StrandFont.footnote)
+                            .foregroundStyle(StrandPalette.textSecondary)
+                    }
+                }
+            }
+            .padding(.top, 8)
+        } label: {
+            Text("Two-minute habit")
+                .font(StrandFont.body)
+                .foregroundStyle(StrandPalette.textPrimary)
+        }
     }
 
     // MARK: - Add row
