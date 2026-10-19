@@ -90,3 +90,17 @@ Review existing maintainer issues, all open owned PRs, current-head CI, baseline
 **Attribution:** ryanbr and NOOP maintainers supplied Rest scoring/resolver and release behavior; original contributors including digitalerdude, paradix86, and UtkuDenizAltiok retain credit for their findings/designs. Retain each PR's own detailed evidence and history. Do not tag maintainers in downstream coordination.
 
 **Workflow:** Before each subsequent wave, read this same file and original PR heads. Update one row only when the evidence or status changes; do not mint another generic queue. The factory [#14](https://github.com/kvnloo/oss-factory/issues/14) is a repository index, not an authorization or QA board.
+
+## 2026-10-19 Journal habits + evidence-integrity wave (fork only)
+
+Origin remains pinned to [ryanbr/noop@8e4b0c1](https://github.com/ryanbr/noop/commit/8e4b0c16e7640607600fa6bde5424095eba6034e). Both changes branch directly from the pinned sync ref, **not** from the fork default branch. Neither is authorized for automatic origin posting or merge.
+
+| Review lane | Fork artifact | Evidence / next gate |
+| --- | --- | --- |
+| Habit stacking (Android) | [draft #54](https://github.com/kvnloo/factory-ryanbr-noop/pull/54), head `8197d2c`, 10 files | Pure two-minute cue/action → **custom Journal Behaviour** question. No inferred or automatic answers, no new DB/API/score. 4 JVM unit cases, EN/DE/ES/FR/PT-PT resources. Branch `feat/android-two-minute-journal-habits-20261019`. Android/i18n CI **queued, not passed** when recorded; independent native UX + TalkBack + translation and cross-platform review pending. |
+| Journal truthfulness (Android) | [draft #58](https://github.com/kvnloo/factory-ryanbr-noop/pull/58), head `f021af9`, 9 files | Removes auto-upsert of yesterday's Yes/No into today's native Journal. Copy requires explicit tap and re-checks current entries before writing to avoid overwriting manually entered answers. Five JVM regression cases, five locales. CI **queued, not passed** when recorded; review runtime behavior and baseline overlap with [#49](https://github.com/kvnloo/factory-ryanbr-noop/pull/49). |
+| Wearable app provenance (Android) | [draft #52](https://github.com/kvnloo/factory-ryanbr-noop/pull/52), head `778fb3c` | Existing Health Connect app-origin readout. First 3 pure smoke cases had passed on fork; full Android CI and hardware writer provenance remain unverified. This is not direct Apple Watch/Galaxy Watch hardware pairing. |
+
+**Promotion priority:** #58 (evidence integrity) -> #49 (explicit controls and baseline selection) -> #54 (opt-in Atomic Habits bridge) -> #52 (wearable provenance), after each has current-head CI, independent review and any applicable device proof. #47/#48 remain separate Rest correctness reviews; #50 remains **NEVER MERGE** integration-only preview. #42–44 remain HOLD until requirements, parity and data validation are established. Respect the bounded 2026-10-17 origin-publication authorization, which does **not** authorize these code PRs.
+
+All original NOOP authorship and license retained; no clinical or causal health assertions.
