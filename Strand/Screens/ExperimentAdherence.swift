@@ -16,6 +16,14 @@ enum ExperimentAdherence {
         return Double(completed) / Double(elapsed)
     }
 
+    /// The experiment measures outcomes in its *calendar* window, not the next N
+    /// available sensor days, which may arrive weeks after the plan ended.
+    static func includes(_ day: String, startedDay: String, today: String, durationDays: Int) -> Bool {
+        guard let start = dayNumber(startedDay), let end = dayNumber(today),
+              let observed = dayNumber(day) else { return false }
+        return observed >= start && observed <= end && observed - start < max(1, durationDays)
+    }
+
     private static func dayNumber(_ key: String) -> Int? {
         let parts = key.split(separator: "-", omittingEmptySubsequences: false)
         guard parts.count == 3, parts[0].count == 4, parts[1].count == 2,
