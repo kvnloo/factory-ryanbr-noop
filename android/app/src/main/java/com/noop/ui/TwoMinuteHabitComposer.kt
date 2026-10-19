@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import com.noop.R
 
 /**
@@ -42,7 +43,8 @@ internal fun TwoMinuteHabitComposer(
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
-            modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+            // Expose the disclosure header as an actionable button to TalkBack.
+            modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { expanded = !expanded },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
