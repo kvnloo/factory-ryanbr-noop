@@ -37,6 +37,14 @@ Post-ready artifacts on this canonical queue branch:
 
 After origin publication through an account with the required access, replace this blocker with exact origin links. This is **not** permission to create origin PRs, merge held drafts or assert clinical benefit.
 
+## 2026-10-19 upstream publication and clinician feedback
+
+- **Origin write verification: STILL BLOCKED (GitHub 403).** A new clinician-informed UX issue creation and a targeted comment on origin #735 were both attempted via the connected GitHub account on October 19, 2026; both returned `Resource not accessible by integration`. **Zero origin posts/PRs/merges from this attempt.** Do not claim the issue exists on origin.
+- Updated the [one ready-to-post clinician UX RFC](./rfcs/2026-10-17-clinician-informed-actionable-insights-ux.md) with the humanitarian healthspan mission, [Simple view #2463](https://github.com/ryanbr/noop/issues/2463), device-source truth and new downstream cases. **Send this fork RFC with [NOOP releases](https://github.com/ryanbr/noop/releases/latest) to a clinician** until the origin issue can be published.
+- New draft [#53](https://github.com/kvnloo/factory-ryanbr-noop/pull/53) fixes Android Journal silently propagating yesterday's answers into today: **exact-head Android CI/manual UX pending; HOLD**.
+- New draft [#54](https://github.com/kvnloo/factory-ryanbr-noop/pull/54) uses the existing Journal for optional two-minute habits: **CI/retargeting/a11y and UX pending; HOLD**. [#51](https://github.com/kvnloo/factory-ryanbr-noop/pull/51) remains an opt-in contextual Android home preview; [#52](https://github.com/kvnloo/factory-ryanbr-noop/pull/52) remains wearable writer-provenance research; neither has a direct-watch compatibility or clinical outcome claim.
+- Existing approved *issue/comment* handoff still proposes exactly one new origin RFC and comments on origin [#735](https://github.com/ryanbr/noop/issues/735)/[#759](https://github.com/ryanbr/noop/issues/759) without duplicates. **No authorization implied to merge code or flood origin with the fork's 54 PRs.** Maintain a separate review gate for candidate code PRs #45–49.
+
 ## Ready for human fork review (not origin approval)
 
 | Priority | Source | Current evidence | Next gate |
