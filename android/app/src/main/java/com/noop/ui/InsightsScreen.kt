@@ -219,7 +219,7 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    androidx.compose.runtime.LaunchedEffect(journalSeq, dayOffset, currentDayKey) {
+    androidx.compose.runtime.LaunchedEffect(journalSeq, dayOffset, currentDayKey, catalogItems) {
         val imported = vm.repo.journal("my-whoop", "0000-01-01", "9999-12-31")
         val native = vm.repo.journal(JOURNAL_DEVICE_ID, "0000-01-01", "9999-12-31")
         val entries = mergeJournalEntries(imported, native)
@@ -252,7 +252,7 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
             // Only current, visible boolean prompts may be copied after confirmation.
             val eligible = resolveJournalItems(importedQuestions, catalogItems)
                 .filterNot { it.kind.isNumeric }
-                .mapTo(hashSetOf()) { normJournalKey(it.canonical) }
+                .mapTo(hashSetOf<String>()) { normJournalKey(it.canonical) }
             previousBooleanJournalAnswers(native, journalDayKey(1L), eligible)
         } else emptyMap()
         // Imported WHOOP answers are observations too; do not offer a blanket copy that
