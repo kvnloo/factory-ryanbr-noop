@@ -5,6 +5,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
 
 /**
  * Pins the Breathe end-of-session outcome line: the 2-minute floor, the honest "—"
@@ -60,6 +61,15 @@ class BreatheOutcomeTest {
         // A completed timer without usable R-R is self-reportable but not an HRV observation.
         assertTrue(shouldOfferBreatheJournal(running = false, freshOutcome = "—"))
         assertTrue(shouldOfferBreatheJournal(running = false, freshOutcome = "+18% vs start"))
+    }
+
+    @Test
+    fun eveningCheckInUsesTheNextWakeDayAcrossYearAndLeapBoundaries() {
+        // A completed Breathe timer never records an answer. The selected
+        // Journal day must still be chosen explicitly by the user.
+        assertEquals("2027-01-01", journalDayKey(-1L, LocalDate.of(2026, 12, 31)))
+        assertEquals("2028-02-29", journalDayKey(-1L, LocalDate.of(2028, 2, 28)))
+        assertEquals("2026-12-31", journalDayKey(0L, LocalDate.of(2026, 12, 31)))
     }
 
     @Test

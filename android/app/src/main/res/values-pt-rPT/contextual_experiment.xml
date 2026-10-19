@@ -11,6 +11,7 @@
     <string name="contextual_effort">Esforço</string>
     <string name="contextual_in_context">EM CONTEXTO</string>
     <string name="contextual_dismiss">Dispensar sugestão</string>
+    <string name="contextual_breathe_wake_day_hint">Se fizer parte da rotina da noite, selecione Amanhã no Diário para associar os dados da manhã seguinte.</string>
     <string name="contextual_journal">Diário</string>
     <string name="contextual_full_dashboard">Painel completo</string>
     <string name="contextual_return_focus">Voltar à vista simples</string>

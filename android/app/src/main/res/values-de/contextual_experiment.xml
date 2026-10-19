@@ -11,6 +11,7 @@
     <string name="contextual_effort">Anstrengung</string>
     <string name="contextual_in_context">IM KONTEXT</string>
     <string name="contextual_dismiss">Hinweis schließen</string>
+    <string name="contextual_breathe_wake_day_hint">Für eine Abendroutine wähle im Tagebuch Morgen, damit der Eintrag zum nächsten Morgen gehört.</string>
     <string name="contextual_journal">Tagebuch</string>
     <string name="contextual_full_dashboard">Vollständige Übersicht</string>
     <string name="contextual_return_focus">Zurück zur Fokusansicht</string>

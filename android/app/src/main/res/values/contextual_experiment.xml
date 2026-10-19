@@ -11,6 +11,7 @@
     <string name="contextual_effort">Effort</string>
     <string name="contextual_in_context">IN CONTEXT</string>
     <string name="contextual_dismiss">Dismiss this suggestion</string>
+    <string name="contextual_breathe_wake_day_hint">If this was part of your evening routine, choose Tomorrow in Journal to align with next-morning outcomes.</string>
     <string name="contextual_journal">Journal</string>
     <string name="contextual_full_dashboard">Full dashboard</string>
     <string name="contextual_return_focus">Return to focus</string>

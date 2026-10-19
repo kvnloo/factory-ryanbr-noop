@@ -747,6 +747,13 @@ fun BreatheScreen(viewModel: AppViewModel, onOpenJournal: (() -> Unit)? = null) 
             TextButton(onClick = onOpenJournal) {
                 Text(uiString(R.string.action_log_journal))
             }
+            // A pre-bed check-in belongs to the next wake-day in NOOP's Journal.
+            // This is guidance only: do not silently pick a day or write a Yes answer.
+            Text(
+                uiString(R.string.contextual_breathe_wake_day_hint),
+                style = NoopType.footnote,
+                color = Palette.textTertiary,
+            )
         }
 
         // Readout tiles.
