@@ -274,6 +274,27 @@ final class JournalLogicTests: XCTestCase {
         XCTAssertEqual(reloaded.displayName(for: canonical), "Evening walk")
     }
 
+    func testUnicodeJournalIdentityMatchesKotlinWhitespaceContract() {
+        // Mirrors JournalLogTest.kt exactly. None of these assertions changes
+        // the actual saved question, only its comparison/deduplication key.
+        let cases: [(String, String)] = [
+            ("  Brush\u{001C} teeth.  ", "brush teeth."),
+            ("\u{001D}brush\u{001F}teeth", "brush teeth"),
+            (" brush\u{0085}teeth ", "brush\u{0085}teeth"),
+            (" brush\u{200B}teeth ", "brush\u{200B}teeth"),
+            (" brush\u{2007}teeth ", "brush teeth"),
+            (" brush\u{00A0}teeth ", "brush teeth"),
+            (" \u{FEFF}brush ", "\u{FEFF}brush"),
+            ("BRUSH\u{202F} Teeth", "brush teeth"),
+        ]
+        for (input, expected) in cases {
+            XCTAssertEqual(Array(JournalCatalogStore.norm(input).utf8), Array(expected.utf8))
+        }
+        XCTAssertEqual(JournalCatalogStore.norm("\u{001F}"), "")
+        XCTAssertNotEqual(JournalCatalogStore.norm("brush\u{200B}teeth"),
+                          JournalCatalogStore.norm("brush teeth"))
+    }
+
     @MainActor
     func testAddCustomNumericItem() {
         let store = makeCatalog()
