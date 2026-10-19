@@ -840,7 +840,10 @@ struct InsightsView: View {
         // WAS logged.
         let interventionWindow = experimentValidObservationDays(
             outcomeDays: outcomeDays, from: experimentStartedDay,
-            through: today, limit: duration)
+            through: today, limit: duration).filter {
+                ExperimentAdherence.includes($0, startedDay: experimentStartedDay,
+                                             today: today, durationDays: duration)
+            }
         let interventionDays = interventionWindow.filter { loggedDays.contains($0) }
 
         let baselineValues = baselineDays.compactMap { outcomeDays[$0] }
