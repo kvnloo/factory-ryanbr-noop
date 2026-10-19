@@ -10,7 +10,7 @@ name: App build (macOS + iOS)
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, qa/noop-pinned-origin-20261019]
     paths:
       - 'Strand/**'
       # The app-target TESTS, not just the sources they cover. The `Test Strand` step below runs

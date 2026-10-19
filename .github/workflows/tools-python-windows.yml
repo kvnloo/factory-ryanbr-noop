@@ -17,7 +17,7 @@ name: Tools Python CI (Windows)
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, qa/noop-pinned-origin-20261019]
     paths:
       - 'Tools/linux-capture/**'
       - '.github/workflows/tools-python-windows.yml'

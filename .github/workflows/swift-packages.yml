@@ -9,7 +9,7 @@ name: Swift Packages CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, qa/noop-pinned-origin-20261019]
     paths:
       - 'Packages/**'
       - 'Tools/SleepBench/**'

@@ -40,7 +40,7 @@ on:
   #
   # This leg is ubuntu and about 25 seconds. It stays on every pull request and every push to main.
   pull_request:
-    branches: [main]
+    branches: [main, qa/noop-pinned-origin-20261019]
   push:
     branches: [main]
   workflow_dispatch:
