@@ -72,4 +72,25 @@ final class TwoMinuteHabitTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(hidden.first).hidden)
     }
 
+
+    /// Kotlin treats U+001C..1F as whitespace and preserves U+0085/U+200B.
+    /// Swift Foundation uses the opposite choices for those six code points.
+    /// Compare UTF-8 bytes rather than Unicode-canonically equivalent Strings.
+    func testUnicodeWhitespaceBoundariesMatchAndroidByteForByte() throws {
+        let examples: [(String, String)] = [
+            ("brush\u{001C}teeth", "After brush teeth, did you read for two minutes?"),
+            ("brush\u{001F}teeth", "After brush teeth, did you read for two minutes?"),
+            ("brush\u{0085}teeth", "After brush\u{0085}teeth, did you read for two minutes?"),
+            ("brush\u{200B}teeth", "After brush\u{200B}teeth, did you read for two minutes?"),
+            ("brush\u{2007}teeth", "After brush teeth, did you read for two minutes?"),
+            ("brush\u{00A0}teeth", "After brush teeth, did you read for two minutes?"),
+            ("\u{FEFF}brush", "After \u{FEFF}brush, did you read for two minutes?"),
+        ]
+        for (cue, expected) in examples {
+            let actual = try XCTUnwrap(twoMinuteHabitQuestion(cue, "read"))
+            XCTAssertEqual(Array(actual.utf8), Array(expected.utf8))
+        }
+        XCTAssertNil(twoMinuteHabitQuestion("\u{001D}", "read"))
+    }
+
 }
