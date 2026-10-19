@@ -42,4 +42,11 @@ class ImportSummaryTest {
         val result = runCatching<ImportSummary> { error("Health Connect unavailable") }.getOrNull()
         assertFalse(result?.succeeded == true)
     }
+    @Test fun failedPartialRowsDoNotEraseRejection() {
+        // A nonzero row count is not proof that all selected HC types finished reading.
+        val failed = ImportSummary.failure("Health Connect", "Partial read failed")
+            .copy(counts = mapOf("dailyMetric" to 2))
+        assertEquals(2, failed.totalRows)
+        assertFalse(failed.succeeded)
+    }
 }
