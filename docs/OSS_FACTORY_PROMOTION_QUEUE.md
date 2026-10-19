@@ -1,6 +1,6 @@
-# Lane 20 — NOOP contribution promotion queue
+# Lane 20 — NOOP historical contribution evidence archive
 
-> **Canonical repository-local queue (2026-10-16).** Issues are disabled in this downstream fork, so this file on `coord/lane20-promotion-queue-20261016` replaces the legacy cross-repository queue at [oss-factory #159](https://github.com/kvnloo/oss-factory/issues/159). Original issue contents and PR discussion remain archived, with authorship intact. **No automatic origin publication/merges.** NOOP uses PolyForm Noncommercial 1.0.0, not an OSI open-source license.
+> **Archived worksheet, not the active promotion queue (October 19, 2026).** Fork Issues are now enabled. The **single canonical per-repository queue is [kvnloo/noop issue #74](https://github.com/kvnloo/noop/issues/74)**; task evidence lives in [Atomic Habits #70](https://github.com/kvnloo/noop/issues/70), [UI #72](https://github.com/kvnloo/noop/issues/72), and other linked owner issues. This branch retains earlier source/CI/provenance receipts, which may be superseded by newer issue/PR heads. Never use this file to infer present readiness or create a parallel queue. Historical [oss-factory #159](https://github.com/kvnloo/oss-factory/issues/159) is archived. No automatic upstream posting/merging; NOOP uses PolyForm Noncommercial 1.0.0, not an OSI open-source license.
 
 ## 2026-10-19 next wave: wake-day attribution and pilot integrity
 
