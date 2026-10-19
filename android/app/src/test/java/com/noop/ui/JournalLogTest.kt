@@ -102,4 +102,50 @@ class JournalLogTest {
         // Month boundary.
         assertEquals("2025-12-31", journalDayKey(1, LocalDate.of(2026, 1, 1)))
     }
+    @Test
+    fun blankTodayNeverInheritsYesterdayYesOrNo() {
+        val yesterday = listOf(
+            e(JOURNAL_DEVICE_ID, "2026-10-18", "Read before bed?", true),
+            e(JOURNAL_DEVICE_ID, "2026-10-18", "Late caffeine?", false),
+        )
+        assertEquals(
+            emptyMap<String, Boolean>(),
+            explicitJournalAnswersForDay(yesterday, "2026-10-19"),
+        )
+        // Reading another day never mutates the source or infers a new observation.
+        assertEquals(2, yesterday.size)
+    }
+
+    @Test
+    fun preservesExplicitYesAndNoOnlyForSelectedDay() {
+        val native = listOf(
+            e(JOURNAL_DEVICE_ID, "2026-10-18", "Read before bed?", true),
+            e(JOURNAL_DEVICE_ID, "2026-10-19", "Read before bed?", false),
+            e(JOURNAL_DEVICE_ID, "2026-10-19", "Walk after lunch?", true),
+            e(JOURNAL_DEVICE_ID, "2026-10-20", "Walk after lunch?", false),
+        )
+        assertEquals(
+            mapOf("Read before bed?" to false, "Walk after lunch?" to true),
+            explicitJournalAnswersForDay(native, "2026-10-19"),
+        )
+        assertEquals(
+            mapOf("Read before bed?" to true),
+            explicitJournalAnswersForDay(native, "2026-10-18"),
+        )
+        assertEquals(
+            emptyMap<String, Boolean>(),
+            explicitJournalAnswersForDay(native, "2026-10-17"),
+        )
+    }
+
+    @Test
+    fun crossedCalendarBoundaryNeverFabricatesControlDays() {
+        val rows = listOf(e(JOURNAL_DEVICE_ID, "2025-12-31", "Habit completed?", false))
+        assertEquals(
+            emptyMap<String, Boolean>(),
+            explicitJournalAnswersForDay(rows, "2026-01-01"),
+        )
+        assertEquals(mapOf("Habit completed?" to false), explicitJournalAnswersForDay(rows, "2025-12-31"))
+    }
+
 }

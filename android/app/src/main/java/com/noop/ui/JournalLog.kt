@@ -100,6 +100,19 @@ internal fun mergeJournalEntries(
     return byKey.values.sortedWith(compareBy({ it.day }, { it.question }))
 }
 
+/** 
+ * Read only the native answers explicitly stored for this calendar day.
+ * No implicit Yes/No carry from yesterday: opening Insights cannot manufacture
+ * experiment intervention or control days. Matching Apple behaviour remains unchanged.
+ */
+internal fun explicitJournalAnswersForDay(
+    native: List<JournalEntry>,
+    day: String,
+): Map<String, Boolean> =
+    native.asSequence()
+        .filter { it.day == day }
+        .associate { it.question to it.answeredYes }
+
 /** Importer convention (WhoopCsvImporter.parseJournal): journal day = the wake/cycle day whose
  *  morning recovery the previous ~24 h affected. "Log today" = answers about yesterday / last
  *  night, attributed to TODAY's local day key; daysBack=1 edits yesterday; daysBack=-1 logs ahead
