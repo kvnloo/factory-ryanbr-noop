@@ -356,7 +356,9 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
             catalogItems = next
         }
         JournalLogCard(
-            items = resolveJournalItems(importedQuestions, catalogItems, includeHidden = false),
+            // Include hidden entries in the card's model, not in its normal view: edit mode
+            // can then offer Restore, and the habit composer detects previously hidden keys.
+            items = resolveJournalItems(importedQuestions, catalogItems, includeHidden = true),
             answers = dayAnswers,
             numericAnswers = dayNumeric,
             dayOffset = dayOffset,
