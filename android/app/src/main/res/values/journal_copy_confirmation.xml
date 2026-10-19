@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="journal_copy_explainer">Previous answers are available. Copy them only if they still apply to this day.</string>
+    <string name="journal_copy_action">Copy previous answers</string>
+</resources>
