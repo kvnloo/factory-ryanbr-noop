@@ -149,6 +149,26 @@ class JournalCatalogTest {
         assertEquals(hidden.single().canonical, restored.single().canonical)
     }
 
+    @Test
+    fun hiddenHabitsStayDeduplicatedAndCanBeRestoredOnlyInEditMode() {
+        val question = "After brushing my teeth, did you read a page for two minutes?"
+        val active = JournalCatalogItem(
+            canonical = "Walked today?", group = JournalGroup.Behaviour, sortIndex = 0,
+        )
+        val hidden = JournalCatalogItem(
+            canonical = question, group = JournalGroup.Behaviour, sortIndex = 1,
+            hidden = true, custom = true,
+        )
+        val all = listOf(active, hidden)
+        assertEquals(listOf(active), journalGroupItemsForDisplay(all, JournalGroup.Behaviour, editing = false))
+        assertEquals(all, journalGroupItemsForDisplay(all, JournalGroup.Behaviour, editing = true))
+        // A hidden canonical still occupies its saved key, so "Add habit" cannot create a second item.
+        assertEquals(all, addCustomJournalItem(all, question, JournalKind.Bool, JournalGroup.Behaviour))
+        val restored = restoreJournalItem(all, question)
+        assertEquals(2, journalGroupItemsForDisplay(restored, JournalGroup.Behaviour, editing = false).size)
+        assertFalse(restored.last().hidden)
+    }
+
     // MARK: - JSON round-trip (persistence)
 
     @Test

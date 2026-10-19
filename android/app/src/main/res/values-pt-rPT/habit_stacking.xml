@@ -6,4 +6,5 @@
     <string name="habit_stack_action">Faça esta pequena ação</string>
     <string name="habit_stack_add">Adicionar ao diário</string>
     <string name="habit_stack_existing">Já está no seu diário</string>
+    <string name="habit_stack_wake_day_hint">Para registar uma ação de hoje, selecione Amanhã acima; os dias do diário correspondem à manhã seguinte.</string>
 </resources>

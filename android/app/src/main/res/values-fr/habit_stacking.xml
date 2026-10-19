@@ -6,4 +6,5 @@
     <string name="habit_stack_action">Faites cette petite action</string>
     <string name="habit_stack_add">Ajouter au journal</string>
     <string name="habit_stack_existing">Déjà dans votre journal</string>
+    <string name="habit_stack_wake_day_hint">Pour noter une action faite aujourd’hui, choisissez Demain ci-dessus ; le journal l’associe au lendemain matin.</string>
 </resources>
