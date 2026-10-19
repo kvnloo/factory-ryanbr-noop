@@ -52,4 +52,19 @@ class JournalExplicitDayAnswersTest {
         )
     }
 
+    @Test fun leapDayWakeDateIsNotAutoAnswered() {
+        // Before-bed log day is the following wake day, but never an implicit Yes or No.
+        assertEquals("2028-02-29", journalDayKey(-1L, java.time.LocalDate.of(2028, 2, 28)))
+        assertEquals("2028-03-01", journalDayKey(-1L, java.time.LocalDate.of(2028, 2, 29)))
+        val previous = listOf(
+            row("2028-02-28", "Did I finish my wind-down?", true),
+            row("2028-02-29", "Did I finish my wind-down?", false),
+        )
+        assertEquals(emptyMap<String, Boolean>(), explicitJournalDayAnswers(previous, "2028-03-01"))
+        assertEquals(
+            mapOf("Did I finish my wind-down?" to false),
+            explicitJournalDayAnswers(previous, "2028-02-29"),
+        )
+    }
+
 }
