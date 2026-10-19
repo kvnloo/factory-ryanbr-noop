@@ -80,6 +80,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** Human-readable WRITER APPLICATIONS reported by Health Connect (not inferred wearable models).
+ * Android-only static presentation data; no new parity-governed function surface. */
+internal val healthConnectWriterAppLabels: Map<String, String> = mapOf(
+    "com.sec.android.app.shealth" to "Samsung Health",
+    "com.fitbit.FitbitMobile" to "Fitbit",
+    "com.garmin.android.apps.connectmobile" to "Garmin Connect",
+    "com.google.android.apps.fitness" to "Google Fit",
+    "com.ouraring.oura" to "Oura",
+    "com.strava" to "Strava",
+)
+
 /**
  * Data Sources — ports the macOS DataSourcesView (Strand/Screens/DataSourcesView.swift)
  * onto the locked Android component system (ScreenScaffold / NoopCard / StatePill /
@@ -191,17 +202,7 @@ fun DataSourcesScreen(vm: AppViewModel) {
             .asSequence()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
-            .map { pkg ->
-                when (pkg) {
-                    "com.sec.android.app.shealth" -> "Samsung Health"
-                    "com.fitbit.FitbitMobile" -> "Fitbit"
-                    "com.garmin.android.apps.connectmobile" -> "Garmin Connect"
-                    "com.google.android.apps.fitness" -> "Google Fit"
-                    "com.ouraring.oura" -> "Oura"
-                    "com.strava" -> "Strava"
-                    else -> pkg
-                }
-            }
+            .map { pkg -> healthConnectWriterAppLabels[pkg] ?: pkg }
             .distinct()
             .sorted()
             .toList()
