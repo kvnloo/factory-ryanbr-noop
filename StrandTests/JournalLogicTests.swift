@@ -246,6 +246,35 @@ final class JournalLogicTests: XCTestCase {
     }
 
     @MainActor
+    func testLegacyCustomSetterRepairsPreviouslyPersistedAliasesWithoutLosingMetadata() throws {
+        let defaults = isolatedDefaults()
+        let store = JournalCatalogStore(defaults: defaults)
+        let canonical = "Did you take a short walk?"
+        let survivor = JournalCatalogItem(
+            canonical: canonical, displayName: "Evening walk", kind: .bool,
+            group: .lifestyle, sortIndex: 4, hidden: false, custom: true)
+        let duplicate = JournalCatalogItem(
+            canonical: "  DID YOU TAKE  A SHORT WALK? ", displayName: "Duplicate",
+            kind: .numeric(unitLabel: "steps"), group: .other,
+            sortIndex: 5, hidden: false, custom: true)
+        let blank = JournalCatalogItem(
+            canonical: "   ", displayName: nil, kind: .bool,
+            group: .other, sortIndex: 6, hidden: false, custom: true)
+
+        // Simulate an older v2 catalog already containing aliases from a
+        // faulty legacy restore. Updating legacy custom questions must heal
+        // the duplicates, preserving the first stored item's identity/edits.
+        store.items = [survivor, duplicate, blank]
+        store.customQuestions = [canonical, " did you take  A short walk?", "  "]
+        XCTAssertEqual(store.items, [survivor])
+        XCTAssertEqual(store.customQuestions, [canonical])
+
+        let reloaded = JournalCatalogStore(defaults: defaults)
+        XCTAssertEqual(reloaded.items, [survivor])
+        XCTAssertEqual(reloaded.displayName(for: canonical), "Evening walk")
+    }
+
+    @MainActor
     func testAddCustomNumericItem() {
         let store = makeCatalog()
         store.items = []
