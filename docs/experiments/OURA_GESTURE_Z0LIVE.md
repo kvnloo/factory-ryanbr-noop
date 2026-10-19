@@ -1,18 +1,21 @@
 # Experimental Oura Gen 3 gesture → Lawnchair z0live
 
 **Downstream Android-only research. OFF / not wired to live BLE.** This change
-provides a headless impulse detector and an explicit Activity intent factory.
+provides a headless impulse detector, candidate ACM packet codec and bounded
+realtime control packet builders, plus an explicit Activity intent factory.
 It does not add a setting, start capture, pair a ring, launch z0live automatically
 or record audio. The existing Oura HR/IBI and WHOOP paths are untouched.
 
 ## Why this needs a separate experiment
 
 NOOP has Oura Gen3 app-key authentication and a live HR GATT source, but it
-does **not** yet use the separate realtime accelerometer channel. The available
+does **not** yet activate the separate realtime accelerometer channel. The available
 clean-room research describes a 0x06 realtime-measurement control with the
 accelerometer type bit and 0x33 live ACM notifications carrying pairs of
-three-axis i16-LE samples. Those claims require an original-ring gold capture
-before being used to create new BLE commands and parsing paths. The ring
+three-axis i16-LE samples. This draft adds a **pure, nonexecuting** 0x33
+parser and 0x06 enable/OFF packet builders using those published facts and the
+existing `.files` synthetic fixture. Actual ring framing still needs a real
+Gen 3 capture before any transport writes are enabled. The ring
 does not expose a verified contact/touch double-tap sensor: taps are *inferred*
 from accelerometer impulses.
 
@@ -34,9 +37,10 @@ a background BLE launch, and no receiver is exported in NOOP for this feature.
 
 1. Owner explicitly enables a **bounded** Oura Gen3 motion session; reuse the
    existing ring auth key in Android Keystore. No reset/rekey or pairing takeover.
-2. Implement independently written 0x06 live ACM start/stop and 0x33 frame
-   decode from facts, after golden packets are available. **Always** issue
-   realtime-OFF on success, timeout, error, disarm and disconnect. Stop the
+2. Qualify the new `OuraAcmCodec` against actual GATT notifications, then
+   wire its bounded 0x06 enable and OFF packet builders into the existing BLE
+   client. **Always** issue realtime-OFF on success, timeout, error,
+   disarm and disconnect. Stop the
    sensor when NOOP is not armed; cap battery use and false positives.
 3. Calibrate hand taps vs walking/typing/hand washing; log only opt-in,
    app-private, bounded diagnostics. Exclude raw capture and keys from PRs.
@@ -59,6 +63,6 @@ No source code copied from reverse-engineering references.
 
 ## Verification
 
-- Kotlin unit tests: `cd android && ./gradlew testFullDebugUnitTest --tests com.noop.oura.OuraTapDetectorTest`
+- Kotlin unit tests: `cd android && ./gradlew testFullDebugUnitTest --tests 'com.noop.oura.Oura*Test'`
 - Android compilation: `cd android && ./gradlew compileFullDebugKotlin`
 - Physical BLE + z0live session qualification: **NOT RUN**.
