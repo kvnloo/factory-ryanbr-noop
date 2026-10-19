@@ -129,12 +129,14 @@ final class JournalCatalogStore: ObservableObject {
             // Append any new customs as `.bool`/`.other` items; drop customs no longer present.
             let keys = Set(newValue.map { Self.norm($0) })
             items.removeAll { $0.custom && !keys.contains(Self.norm($0.canonical)) }
-            let existing = Set(items.map { Self.norm($0.canonical) })
+            // Extend the seen set as we append: legacy restores can contain repeated
+            // names with different case or whitespace; each canonical key gets one item.
+            var seen = Set(items.map { Self.norm($0.canonical) })
             var next = nextSortIndex()
             for q in newValue {
                 let key = Self.norm(q)
                 let t = q.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !t.isEmpty, !existing.contains(key) else { continue }
+                guard !t.isEmpty, seen.insert(key).inserted else { continue }
                 items.append(JournalCatalogItem(canonical: t, displayName: nil, kind: .bool,
                                                 group: .other, sortIndex: next,
                                                 hidden: false, custom: true))

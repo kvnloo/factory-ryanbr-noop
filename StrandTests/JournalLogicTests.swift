@@ -223,6 +223,29 @@ final class JournalLogicTests: XCTestCase {
     }
 
     @MainActor
+    func testLegacyCustomSetterDeduplicatesAliasesAndPreservesCanonicalOnReload() {
+        let defaults = isolatedDefaults()
+        let store = JournalCatalogStore(defaults: defaults)
+        store.customQuestions = [
+            "Did you take a short walk?",
+            "  did you take  A SHORT walk?  ",
+            "Did you read after dinner?",
+            "DID YOU READ AFTER DINNER?",
+        ]
+        XCTAssertEqual(store.customQuestions,
+                       ["Did you take a short walk?", "Did you read after dinner?"])
+        XCTAssertEqual(store.items.filter { $0.custom }.count, 2)
+
+        // A settings/backup-driven reload must not resurrect duplicate entries.
+        let reloaded = JournalCatalogStore(defaults: defaults)
+        XCTAssertEqual(reloaded.customQuestions,
+                       ["Did you take a short walk?", "Did you read after dinner?"])
+        reloaded.customQuestions = ["DID YOU READ AFTER DINNER?", "did you read after dinner?"]
+        XCTAssertEqual(reloaded.customQuestions, ["Did you read after dinner?"])
+        XCTAssertEqual(reloaded.items.filter { $0.custom }.count, 1)
+    }
+
+    @MainActor
     func testAddCustomNumericItem() {
         let store = makeCatalog()
         store.items = []
