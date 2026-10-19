@@ -1,0 +1,54 @@
+# Fork-only exact-head QA for the NOOP Breathe → Journal pilot.
+# Integration branch only. No release tag, credentials, telemetry or publishing upstream.
+name: Limitless Android integration QA
+
+on:
+  push:
+    branches:
+      - qa/limitless-integrated-20261019-breathe-journal
+
+permissions:
+  contents: read
+
+concurrency:
+  group: limitless-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - name: Checkout exact integration commit
+        uses: actions/checkout@v5
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v5
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+      - name: Build Android debug APK
+        run: ./gradlew assembleFullDebug
+      - name: Run Android unit tests
+        run: ./gradlew testFullDebugUnitTest
+      - name: Hash APK
+        run: |
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/full/debug/*.apk)
+          test "${#apks[@]}" -eq 1
+          sha256sum "${apks[0]}" | tee app/build/outputs/limitless-apk.sha256
+      - name: Upload debug APK and SHA-256
+        uses: actions/upload-artifact@v4
+        with:
+          name: limitless-android-${{ github.sha }}
+          path: |
+            android/app/build/outputs/apk/full/debug/*.apk
+            android/app/build/outputs/limitless-apk.sha256
+          retention-days: 14
+          if-no-files-found: error
