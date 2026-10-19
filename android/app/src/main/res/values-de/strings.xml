@@ -2873,4 +2873,13 @@
     <string name="raw_diag_ecg_probe_running">Auf diesem Strap läuft möglicherweise noch eine Aufzeichnung. Das Ergebnis steht im Strap-Log.</string>
     <string name="today_customize_live_session_availability">Erscheint heute, wenn Live Sessions in den Einstellungen aktiviert sind oder eine Session aktiv ist.</string>
     <string name="l10n_app_changelog_today_your_way_heart_rate_any_5e1308b3">Today nach Ihren Wünschen, Herzfrequenz für jede App und Italienisch</string>
+    <string name="l10n_tiny_habit_header_20261019">2-Minuten-Gewohnheiten</string>
+    <string name="l10n_tiny_habit_done_20261019">Erledigt</string>
+    <string name="l10n_tiny_habit_skipped_20261019">Ausgelassen</string>
+    <string name="l10n_tiny_habit_unanswered_20261019">Nicht erfasst</string>
+    <string name="l10n_tiny_habit_create_20261019">2-Minuten-Gewohnheit erstellen</string>
+    <string name="l10n_tiny_habit_cue_20261019">Nachdem ich…</string>
+    <string name="l10n_tiny_habit_action_20261019">Ich werde…</string>
+    <string name="l10n_tiny_habit_add_20261019">Gewohnheit hinzufügen</string>
+    <string name="l10n_tiny_habit_tomorrow_hint_20261019">Um eine heutige Handlung zu erfassen, oben Morgen wählen, damit sie zum nächsten Morgen gehört.</string>
 </resources>
