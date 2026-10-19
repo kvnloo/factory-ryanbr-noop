@@ -2889,4 +2889,13 @@
     <string name="raw_diag_ecg_probe_running">A capture may still be running on this strap. The verdict goes to the strap log.</string>
     <string name="today_customize_live_session_availability">Appears today when Live Sessions is enabled in Settings or a session is active.</string>
     <string name="l10n_app_changelog_today_your_way_heart_rate_any_5e1308b3">Today your way, heart rate any app can read, and Italian</string>
+    <string name="l10n_tiny_habit_header_20261019">2-minute habits</string>
+    <string name="l10n_tiny_habit_done_20261019">Done</string>
+    <string name="l10n_tiny_habit_skipped_20261019">Skipped</string>
+    <string name="l10n_tiny_habit_unanswered_20261019">Not recorded</string>
+    <string name="l10n_tiny_habit_create_20261019">Create a 2-minute habit</string>
+    <string name="l10n_tiny_habit_cue_20261019">After I…</string>
+    <string name="l10n_tiny_habit_action_20261019">I will…</string>
+    <string name="l10n_tiny_habit_add_20261019">Add habit</string>
+    <string name="l10n_tiny_habit_tomorrow_hint_20261019">To log an action from today, select Tomorrow above so it aligns with the next morning.</string>
 </resources>
