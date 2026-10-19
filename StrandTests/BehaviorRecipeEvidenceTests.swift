@@ -104,4 +104,79 @@ final class BehaviorRecipeEvidenceTests: XCTestCase {
         XCTAssertEqual(result.meanWithout, 73, accuracy: 1e-9)
         XCTAssertEqual(result.delta, -12, accuracy: 1e-9)
     }
+
+    /// Uses the actual GRDB-backed in-memory database, rather than only projecting
+    /// synthetic value arrays. This covers source-scoped writes, reads, native
+    /// precedence after a WHOOP reimport, and explicit No versus unanswered days.
+    /// No device, real participant data, or causal inference is involved.
+    func testPersistedJournalAndMetricRowsRespectExplicitAnswersAfterReimport() async throws {
+        let store = try await WhoopStore.inMemory()
+        let question = "Did you have caffeine late in the day?"
+        let days = (1...12).map { String(format: "2026-09-%02d", $0) }
+        let yesDays = Array(days.prefix(5))
+        let noDays = Array(days.dropFirst(5).prefix(5))
+        let values: [Double] = [82, 80, 84, 78, 81, 87, 89, 85, 86, 88, 10, 99]
+
+        // An earlier imported Yes conflicts with a newer explicit native No.
+        // Importing data is not permission to rewrite the user's local answer.
+        let imported = yesDays.map {
+            JournalEntry(day: $0, question: question, answeredYes: true, notes: nil)
+        } + [
+            JournalEntry(day: noDays[0], question: question, answeredYes: true, notes: nil)
+        ]
+        let native = noDays.map {
+            JournalEntry(day: $0, question: question, answeredYes: false, notes: nil)
+        }
+        try await store.upsertJournal(imported, deviceId: "my-whoop")
+        try await store.upsertJournal(native, deviceId: "noop-journal")
+        try await store.upsertMetricSeries(zip(days, values).map {
+            MetricPoint(day: $0.0, key: "sleep_efficiency", value: $0.1)
+        }, deviceId: "my-whoop")
+
+        // Reimporting the historical span must not touch the native source.
+        try await store.replaceJournalRange(imported, deviceId: "my-whoop",
+                                            from: days[0], to: days[9])
+        let importedRead = try await store.journalEntries(
+            deviceId: "my-whoop", from: days[0], to: days[11])
+        let nativeRead = try await store.journalEntries(
+            deviceId: "noop-journal", from: days[0], to: days[11])
+        let merged = Repository.mergeJournal(imported: importedRead, native: nativeRead)
+        let positive = Set(merged.filter { $0.answeredYes }.map(\.day))
+        let negative = Set(merged.filter { !$0.answeredYes }.map(\.day))
+        XCTAssertEqual(positive, Set(yesDays))
+        XCTAssertEqual(negative, Set(noDays))
+        XCTAssertTrue(Set(days.suffix(2)).isDisjoint(with: positive.union(negative)))
+
+        // Metric presence alone cannot create a Journal No control.
+        let metrics = try await store.metricSeries(
+            deviceId: "my-whoop", key: "sleep_efficiency", from: days[0], to: days[11])
+        let outcome = Dictionary(uniqueKeysWithValues: metrics.map { ($0.day, $0.value) })
+        XCTAssertEqual(outcome.count, 12)
+        let effect = try XCTUnwrap(BehaviorInsights.effect(
+            behaviorDays: positive,
+            controlDays: negative,
+            outcomeByDay: outcome,
+            behavior: question,
+            outcome: "sleep_efficiency"
+        ))
+        XCTAssertEqual(effect.nWith, 5)
+        XCTAssertEqual(effect.nWithout, 5)
+        XCTAssertEqual(effect.delta, -6, accuracy: 1e-9)
+
+        // A deliberate native clear reveals the still-present imported value;
+        // it does not erase the imported source or fabricate an unknown day.
+        let removed = try await store.deleteJournal(
+            deviceId: "noop-journal", day: noDays[0], question: question)
+        XCTAssertEqual(removed, 1)
+        let afterClear = Repository.mergeJournal(
+            imported: try await store.journalEntries(
+                deviceId: "my-whoop", from: days[0], to: days[11]),
+            native: try await store.journalEntries(
+                deviceId: "noop-journal", from: days[0], to: days[11])
+        )
+        XCTAssertTrue(afterClear.contains { $0.day == noDays[0] && $0.answeredYes })
+        XCTAssertEqual(afterClear.filter { !$0.answeredYes }.count, 4)
+        XCTAssertFalse(afterClear.contains { $0.day == days[10] || $0.day == days[11] })
+    }
+
 }
