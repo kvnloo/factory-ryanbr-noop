@@ -46,4 +46,32 @@ class JournalCopySuggestionTest {
         val imported = mapOf("read" to true)
         assertEquals(mapOf("walk" to true), missingJournalCopyAnswers(candidate, imported))
     }
+    @Test fun numericRowsCannotBeCopiedAsDoseFreeYesEvidence() {
+        val yesterday = "2026-10-18"
+        val rows = listOf(
+            com.noop.data.JournalEntry(JOURNAL_DEVICE_ID, yesterday, "Caffeine (mg)", true, numericValue = 120.0),
+            com.noop.data.JournalEntry(JOURNAL_DEVICE_ID, yesterday, "Read a page?", true),
+            com.noop.data.JournalEntry(JOURNAL_DEVICE_ID, yesterday, "Avoided screen?", false),
+        )
+        val eligible = setOf("caffeine (mg)", "read a page?", "avoided screen?")
+        assertEquals(
+            mapOf("Read a page?" to true, "Avoided screen?" to false),
+            previousBooleanJournalAnswers(rows, yesterday, eligible),
+        )
+    }
+
+    @Test fun onlyVisibleBooleanCatalogQuestionsAreCopyable() {
+        val yesterday = "2026-10-18"
+        val rows = listOf(
+            com.noop.data.JournalEntry(JOURNAL_DEVICE_ID, yesterday, "Did I stretch?", true),
+            com.noop.data.JournalEntry(JOURNAL_DEVICE_ID, yesterday, "Hidden custom?", false),
+            com.noop.data.JournalEntry(JOURNAL_DEVICE_ID, "2026-10-17", "Did I stretch?", false),
+        )
+        assertEquals(
+            mapOf("Did I stretch?" to true),
+            previousBooleanJournalAnswers(rows, yesterday, setOf(normJournalKey(" DID I STRETCH? "))),
+        )
+        assertTrue(previousBooleanJournalAnswers(rows, yesterday, emptySet()).isEmpty())
+    }
+
 }
