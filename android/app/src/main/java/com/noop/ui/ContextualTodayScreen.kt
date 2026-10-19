@@ -81,6 +81,7 @@ internal fun ContextualTodayScreen(
     onOpenTrends: () -> Unit,
     onOpenLive: () -> Unit,
     onOpenJournal: () -> Unit,
+    onOpenBreathe: () -> Unit,
     onOpenFullDashboard: () -> Unit,
     onResumeWorkout: () -> Unit,
 ) {
@@ -261,6 +262,9 @@ internal fun ContextualTodayScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
+            // Explicit user choice: guided breathing already exists, and Journal owns check-ins.
+            // No inferred habit completion or auto-start; the user controls both actions.
+            TextButton(onClick = onOpenBreathe) { Text(stringResource(R.string.nav_breathe)) }
             TextButton(onClick = onOpenJournal) { Text(stringResource(R.string.contextual_journal)) }
             TextButton(onClick = onOpenFullDashboard) { Text(stringResource(R.string.contextual_full_dashboard)) }
         }

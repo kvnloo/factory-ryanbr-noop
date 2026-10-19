@@ -638,6 +638,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                             onOpenTrends = { nav.navigateTopLevel(Destination.Trends.route) },
                             onOpenLive = { nav.navigate(Destination.Live.route) },
                             onOpenJournal = { nav.navigateTopLevel(Destination.Insights.route) },
+                            onOpenBreathe = { nav.navigateTopLevel(Destination.Breathe.route) },
                             onOpenFullDashboard = { classicDashboard = true },
                             onResumeWorkout = {
                                 viewModel.openActiveWorkout()
