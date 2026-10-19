@@ -1,0 +1,9 @@
+<resources>
+    <string name="oura_broker_pair_hint">Private z0live pairing link for NOOP</string>
+    <string name="oura_broker_pair">Pair gesture broker (opt-in)</string>
+    <string name="oura_broker_paired">Broker enabled. Arm the ring to send gestures, never raw motion. Enable Standby in Lawnchair first.</string>
+    <string name="oura_broker_forget">Forget broker / export OFF</string>
+    <string name="oura_broker_failed">Broker unavailable or refused. No local microphone was started. Check pairing, listener ownership and network.</string>
+    <string name="oura_broker_sent">Gesture accepted by broker; check target voice status.</string>
+    <string name="oura_broker_expired">Capture expired. Ring OFF requested and broker lease released.</string>
+</resources>

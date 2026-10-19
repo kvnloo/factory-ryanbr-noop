@@ -19,6 +19,11 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.EditText
+import android.text.InputType
+import android.view.WindowManager
+import com.noop.ble.gesture.OuraGestureBroker
+import java.util.concurrent.Executors
 import com.noop.ble.gesture.OuraTapDetector
 import com.noop.NoopApplication
 import com.noop.R
@@ -34,6 +39,10 @@ class OuraGestureSetupActivity : Activity() {
     private lateinit var progress: TextView
     private lateinit var arm: Button
     private lateinit var stop: Button
+    private val broker by lazy { OuraGestureBroker(this) }
+    private val export = Executors.newSingleThreadExecutor()
+    private var claiming = false
+    private var claimGeneration = 0
     private var armed = false
     private var visible = false
     private var doubles = 0
@@ -41,14 +50,13 @@ class OuraGestureSetupActivity : Activity() {
     private var capability: PendingIntent? = null
     private val handler = Handler(Looper.getMainLooper())
     private val endNotice = Runnable {
-        armed = false
-        arm.isEnabled = true
-        stop.isEnabled = false
-        status.text = "Gesture capture expired. No ring motion is being collected."
+        disarm()
+        status.text = getString(R.string.oura_broker_expired)
     }
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         capability = if (Build.VERSION.SDK_INT >= 33) {
             intent.getParcelableExtra(EXTRA_CAPABILITY, PendingIntent::class.java)
         } else {
@@ -99,6 +107,21 @@ class OuraGestureSetupActivity : Activity() {
             disarm()
             startActivity(Intent(this, MainActivity::class.java))
         }
+        val pairing = EditText(this).apply {
+            hint = getString(R.string.oura_broker_pair_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+        }
+        column.addView(pairing)
+        button(getString(R.string.oura_broker_pair)) {
+            disarm()
+            val link = pairing.text.toString()
+            pairing.text.clear()
+            runCatching { broker.pair(link) }
+                .onSuccess { status.text = getString(R.string.oura_broker_paired) }
+                .onFailure { status.text = getString(R.string.oura_broker_failed) }
+        }
+        button(getString(R.string.oura_broker_forget)) { disarm(); export.execute { runCatching { broker.release() }; broker.forget() } }
         button("Open z0live voice controls") { openControls() }
         button("Close setup") { disarm(); finish() }
         setContentView(scroll)
@@ -107,14 +130,30 @@ class OuraGestureSetupActivity : Activity() {
     private fun dp(n: Int): Int = (n * resources.displayMetrics.density + 0.5f).toInt()
     private val coordinator get() = (application as NoopApplication).sourceCoordinator
 
-    private fun begin() {
-        if (armed) return
+    private fun begin(leaseReady: Boolean = false) {
+        if (armed || claiming) return
         if (Build.VERSION.SDK_INT >= 31 &&
             (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED ||
                 checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)) {
             status.text = "Allow Bluetooth permissions for NOOP first, then arm the ring."
             requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT,
                 Manifest.permission.BLUETOOTH_SCAN), BLUETOOTH_REQUEST)
+            return
+        }
+        if (broker.configured && !leaseReady) {
+            claiming = true
+            stop.isEnabled = true
+            val generation = ++claimGeneration
+            export.execute {
+                val ok = runCatching { broker.claim(120) }.isSuccess
+                handler.post {
+                    claiming = false
+                    if (generation != claimGeneration || isDestroyed) {
+                        if (!export.isShutdown) export.execute { runCatching { broker.release() } }
+                    } else if (ok) begin(true)
+                    else status.text = getString(R.string.oura_broker_failed)
+                }
+            }
             return
         }
         doubles = 0
@@ -128,11 +167,14 @@ class OuraGestureSetupActivity : Activity() {
                     status.text = if (doubles < 3) "Tap the ring twice again (${3 - doubles} trial(s) remain)."
                         else "Three trials detected. Next double tap will invoke z0live."
                 } else {
-                    deliverGesture()
+                    deliverGesture("double_tap")
                 }
+            } else if (gesture == OuraTapDetector.Gesture.TRIPLE_TAP && doubles >= 3) {
+                deliverGesture("triple_tap")
             }
         }
         if (!ok) {
+            export.execute { runCatching { broker.release() } }
             status.text = "NOOP needs an authenticated, actively connected Gen 3 ring. " +
                 "Open NOOP → Devices, select Oura Ring 3 and reconnect, then retry."
             return
@@ -145,7 +187,15 @@ class OuraGestureSetupActivity : Activity() {
         handler.postDelayed(endNotice, 120_000)
     }
 
-    private fun deliverGesture() {
+    private fun deliverGesture(gesture: String) {
+        if (broker.configured) {
+            export.execute {
+                val ok = runCatching { broker.send(gesture) }.getOrDefault(false)
+                handler.post { if (!isDestroyed) status.text = getString(if (ok) R.string.oura_broker_sent else R.string.oura_broker_failed) }
+            }
+            return // Never fire capability AND broker; an ambiguous request must not toggle twice.
+        }
+        if (gesture != "double_tap") return
         val token = capability
         if (token != null) {
             sequence++
@@ -190,6 +240,9 @@ class OuraGestureSetupActivity : Activity() {
     }
 
     private fun disarm() {
+        claimGeneration++
+        claiming = false
+        export.execute { runCatching { broker.release() } }
         if (armed) coordinator.stopActiveOuraGestureCapture()
         armed = false
         handler.removeCallbacks(endNotice)
@@ -200,7 +253,12 @@ class OuraGestureSetupActivity : Activity() {
 
     override fun onResume() { super.onResume(); visible = true }
     override fun onPause() { visible = false; super.onPause() }
-    override fun onDestroy() { disarm(); super.onDestroy() }
+    override fun onDestroy() {
+        disarm()
+        export.execute { runCatching { broker.release() }; export.shutdown() }
+        super.onDestroy()
+    }
+
 
     companion object {
         const val EXTRA_CAPABILITY = "app.lawnchair.zer0.voice.z0live.CAPABILITY"
