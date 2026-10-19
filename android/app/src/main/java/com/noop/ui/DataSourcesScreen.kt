@@ -518,7 +518,7 @@ fun DataSourcesScreen(vm: AppViewModel) {
                 val remaining = hcOriginApps.size - 4
                 Text(
                     stringResource(R.string.health_connect_writer_apps) + ": " + shown +
-                        (if (remaining > 0) " +$remaining" else ""),
+                        (if (remaining > 0) " " + stringResource(R.string.health_connect_writer_more, remaining) else ""),
                     style = NoopType.footnote,
                     color = Palette.textSecondary,
                 )
