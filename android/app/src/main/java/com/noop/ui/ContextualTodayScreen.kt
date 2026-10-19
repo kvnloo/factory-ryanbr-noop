@@ -266,8 +266,13 @@ internal fun ContextualTodayScreen(
             // No inferred habit completion or auto-start; the user controls both actions.
             TextButton(onClick = onOpenBreathe) { Text(stringResource(R.string.nav_breathe)) }
             TextButton(onClick = onOpenJournal) { Text(stringResource(R.string.contextual_journal)) }
-            TextButton(onClick = onOpenFullDashboard) { Text(stringResource(R.string.contextual_full_dashboard)) }
         }
+        // Keep the third action on its own line: all three cannot fit at large
+        // font sizes or in longer translations on a narrow Android viewport.
+        TextButton(
+            onClick = onOpenFullDashboard,
+            modifier = Modifier.align(Alignment.End),
+        ) { Text(stringResource(R.string.contextual_full_dashboard)) }
     }
 }
 
