@@ -626,6 +626,17 @@ class SourceCoordinator(
         (activeSource as? OuraLiveSource)?.reconnect()
     }
 
+    fun startActiveOuraGestureCapture(
+        seconds: Int,
+        onGesture: (com.noop.oura.OuraTapDetector.Gesture) -> Unit,
+    ): Boolean = (activeSource as? OuraLiveSource)?.startGestureCapture(seconds, onGesture) ?: false
+
+    fun stopActiveOuraGestureCapture() {
+        (activeSource as? OuraLiveSource)?.stopGestureCapture()
+    }
+
+
+
     /**
      * #771 (twin of Swift's `SourceCoordinator.adoptOuraSerial`): the live Oura source read the ring's stable
      * SERIAL on connect. Re-point this device from its transient address-based id ([currentId]) onto its
