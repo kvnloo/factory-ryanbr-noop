@@ -160,7 +160,9 @@ class RepositoryBaselineTests(unittest.TestCase):
         )
         self.assertIn("working-directory: Tools/linux-capture", windows)
         self.assertNotIn("working-directory: Tools\n", windows)
-        self.assertIn("pull_request:\n    branches: [main]\n    paths:", governance)
+        # Fork-only QA CI adds a pinned review target without removing main.
+        # Keep the exact allowlist and all existing product-path exclusions below.
+        self.assertIn("pull_request:\n    branches: [main, qa/noop-pinned-origin-20261019]\n    paths:", governance)
         governance_paths = [
             line.strip()[3:-1]
             for line in governance.splitlines()
