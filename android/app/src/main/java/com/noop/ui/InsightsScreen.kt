@@ -1361,7 +1361,7 @@ private fun buildExperimentSnapshot(
     val interventionWindow = experimentValidObservationDays(
         outcomeDays = outcomeDays, from = startedDay,
         through = today, limit = duration,
-    )
+    ).filter { ExperimentAdherence.includes(it, startedDay, today, duration) }
     val interventionKeys = interventionWindow.filter { it in loggedDays }
 
     val baselineValues = baselineKeys.mapNotNull { outcomeDays[it] }
