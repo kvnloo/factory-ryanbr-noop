@@ -17,6 +17,23 @@ public enum JournalConsistency {
         public let todayAnswer: Bool?
     }
 
+    /// Baselines.isoEpochDay deliberately accepts some impossible dates (e.g. day 32),
+    /// so validate imported keys first rather than turning malformed Journal rows into
+    /// observations on a different date. Identical check in the Kotlin twin.
+    private static func canonicalEpochDay(_ iso: String) -> Int? {
+        let bytes = Array(iso.utf8)
+        guard bytes.count == 10, bytes[4] == 45, bytes[7] == 45,
+              (0..<10).allSatisfy({ i in i == 4 || i == 7 || (48...57).contains(bytes[i]) }),
+              let year = Int(iso.prefix(4)),
+              let month = Int(iso.dropFirst(5).prefix(2)),
+              let day = Int(iso.suffix(2)),
+              (1...12).contains(month) else { return nil }
+        let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+        let lengths = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        guard day >= 1, day <= lengths[month - 1] else { return nil }
+        return Baselines.isoEpochDay(iso)
+    }
+
     /// Derive an auditable 1...90-day view from already-merged answers for one question.
     ///
     /// Later duplicate rows win, matching Journal edit precedence. Rows after today are
@@ -29,11 +46,11 @@ public enum JournalConsistency {
         today: String,
         windowDays: Int = 7
     ) -> Summary? {
-        guard let t = Baselines.isoEpochDay(today) else { return nil }
+        guard let t = canonicalEpochDay(today) else { return nil }
         let window = Swift.max(1, Swift.min(windowDays, 90))
         var answers: [Int: Bool] = [:]
         for i in 0..<Swift.min(dayKeys.count, answeredYes.count) {
-            guard let d = Baselines.isoEpochDay(dayKeys[i]), d <= t else { continue }
+            guard let d = canonicalEpochDay(dayKeys[i]), d <= t else { continue }
             answers[d] = answeredYes[i]
         }
 
