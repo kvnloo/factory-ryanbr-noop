@@ -153,6 +153,19 @@ internal fun loadHiddenJournalQuestions(context: Context): List<String> =
 internal fun saveHiddenJournalQuestions(context: Context, questions: List<String>) =
     saveJournalList(context, JOURNAL_HIDDEN_KEY, questions)
 
+/**
+ * Hidden Journal items remain in the model to preserve canonical-key identity and offer
+ * Restore in edit mode, but must not display as unanswered prompts during normal logging.
+ * Sharing this filter with the UI makes both halves of the contract JVM-testable.
+ */
+internal fun journalGroupItemsForDisplay(
+    items: List<JournalCatalogItem>,
+    group: JournalGroup,
+    editing: Boolean,
+): List<JournalCatalogItem> =
+    items.filter { it.group == group && (editing || !it.hidden) }
+        .sortedWith(compareBy({ it.sortIndex }, { it.display }))
+
 // MARK: - The logging card (hosted at the top of Insights)
 
 /**
@@ -247,8 +260,7 @@ fun JournalLogCard(
                 )
                 // Grouped, collapsible blocks in the fixed display order. Empty groups hide outside edit.
                 JournalGroup.displayOrder.forEach { group ->
-                    val groupItems = items.filter { it.group == group }
-                        .sortedWith(compareBy({ it.sortIndex }, { it.display }))
+                    val groupItems = journalGroupItemsForDisplay(items, group, editing)
                     if (groupItems.isNotEmpty() || editing) {
                         JournalGroupBlock(
                             group = group,
@@ -269,6 +281,15 @@ fun JournalLogCard(
                 }
                 JournalDivider()
                 JournalAddRow(onAddCustom = onAddCustom)
+                // A habit stack is a regular, user-owned Journal question — no second
+                // habit database or scoring path. Yes/No/unknown remain the same tri-state.
+                if (!editing) {
+                    JournalDivider()
+                    TwoMinuteHabitComposer(
+                        items = items,
+                        onAdd = { question -> onAddCustom(question, JournalKind.Bool, JournalGroup.Behaviour) },
+                    )
+                }
             }
         }
     }
@@ -565,7 +586,7 @@ private fun JournalRemoveButton(isCustom: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun journalFieldColors() = OutlinedTextFieldDefaults.colors(
+internal fun journalFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = Palette.textPrimary,
     unfocusedTextColor = Palette.textPrimary,
     disabledTextColor = Palette.textTertiary,

@@ -383,7 +383,9 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
             catalogItems = next
         }
         JournalLogCard(
-            items = resolveJournalItems(importedQuestions, catalogItems, includeHidden = false),
+            // Keep hidden items in the model for Restore and duplicate detection;
+            // JournalLogCard filters them outside edit mode.
+            items = resolveJournalItems(importedQuestions, catalogItems, includeHidden = true),
             answers = dayAnswers,
             numericAnswers = dayNumeric,
             dayOffset = dayOffset,

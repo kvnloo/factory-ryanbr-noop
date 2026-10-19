@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="habit_stack_title">Zwei-Minuten-Gewohnheit</string>
+    <string name="habit_stack_explainer">Wähle einen Auslöser und eine kleine Handlung. Speichere sie im Journal und antworte selbst mit Ja oder Nein.</string>
+    <string name="habit_stack_cue">Nach diesem Auslöser</string>
+    <string name="habit_stack_action">Diese kleine Handlung</string>
+    <string name="habit_stack_add">Zum Journal hinzufügen</string>
+    <string name="habit_stack_existing">Bereits in deinem Journal</string>
+    <string name="habit_stack_wake_day_hint">Um eine heutige Handlung zu erfassen, wähle oben Morgen. Journal-Tage gehören zum folgenden Morgen.</string>
+</resources>

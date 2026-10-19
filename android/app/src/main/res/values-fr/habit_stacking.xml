@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="habit_stack_title">Habitude de deux minutes</string>
+    <string name="habit_stack_explainer">Choisissez un déclencheur et une petite action. Ajoutez-les au journal, puis répondez vous-même par oui ou non.</string>
+    <string name="habit_stack_cue">Après ce déclencheur</string>
+    <string name="habit_stack_action">Faites cette petite action</string>
+    <string name="habit_stack_add">Ajouter au journal</string>
+    <string name="habit_stack_existing">Déjà dans votre journal</string>
+    <string name="habit_stack_wake_day_hint">Pour noter une action faite aujourd’hui, choisissez Demain ci-dessus ; le journal l’associe au lendemain matin.</string>
+</resources>
