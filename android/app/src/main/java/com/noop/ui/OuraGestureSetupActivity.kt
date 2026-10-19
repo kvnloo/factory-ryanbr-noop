@@ -42,7 +42,8 @@ class OuraGestureSetupActivity : Activity() {
     private val broker by lazy { OuraGestureBroker(this) }
     private val export = Executors.newSingleThreadExecutor()
     private var claiming = false
-    private var claimGeneration = 0
+    // Read by the single-thread export worker; Stop invalidates queued events immediately.
+    @Volatile private var claimGeneration = 0
     private var armed = false
     private var visible = false
     private var doubles = 0
@@ -117,9 +118,24 @@ class OuraGestureSetupActivity : Activity() {
             disarm()
             val link = pairing.text.toString()
             pairing.text.clear()
-            runCatching { broker.pair(link) }
-                .onSuccess { status.text = getString(R.string.oura_broker_paired) }
-                .onFailure { status.text = getString(R.string.oura_broker_failed) }
+            val generation = claimGeneration
+            // Disarm queues the old remote lease release. Pair on the SAME
+            // worker after it, so rotating credentials cannot strand that lease
+            // or race with an earlier gesture send. Keystore work also stays off UI.
+            export.execute {
+                if (generation != claimGeneration) return@execute
+                val paired = runCatching {
+                    broker.release()
+                    broker.pair(link)
+                }.isSuccess
+                handler.post {
+                    if (generation == claimGeneration && !isDestroyed) {
+                        status.text = getString(
+                            if (paired) R.string.oura_broker_paired else R.string.oura_broker_failed
+                        )
+                    }
+                }
+            }
         }
         button(getString(R.string.oura_broker_forget)) { disarm(); export.execute { runCatching { broker.release() }; broker.forget() } }
         button("Open z0live voice controls") { openControls() }
@@ -189,9 +205,18 @@ class OuraGestureSetupActivity : Activity() {
 
     private fun deliverGesture(gesture: String) {
         if (broker.configured) {
+            val generation = claimGeneration
             export.execute {
+                // Stop/re-pair increments generation on the UI thread. Queued
+                // gestures from an expired or disarmed capture must not toggle
+                // the remote voice session after the owner pressed Stop.
+                if (generation != claimGeneration) return@execute
                 val ok = runCatching { broker.send(gesture) }.getOrDefault(false)
-                handler.post { if (!isDestroyed) status.text = getString(if (ok) R.string.oura_broker_sent else R.string.oura_broker_failed) }
+                handler.post {
+                    if (generation == claimGeneration && !isDestroyed) {
+                        status.text = getString(if (ok) R.string.oura_broker_sent else R.string.oura_broker_failed)
+                    }
+                }
             }
             return // Never fire capability AND broker; an ambiguous request must not toggle twice.
         }
