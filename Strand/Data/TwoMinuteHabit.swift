@@ -21,7 +21,7 @@ private func cleanHabitPart(_ input: String) -> String {
     var out = ""
     var pendingSpace = false
     for scalar in input.unicodeScalars {
-        if CharacterSet.whitespacesAndNewlines.contains(scalar) {
+        if isAndroidJournalWhitespace(scalar) {
             if !out.isEmpty { pendingSpace = true }
         } else {
             if pendingSpace { out.append(" ") }
@@ -31,4 +31,19 @@ private func cleanHabitPart(_ input: String) -> String {
     }
     while let last = out.last, " .,;?!:".contains(last) { out.removeLast() }
     return out
+}
+
+/// Kotlin `Char.isWhitespace()` is the Android Journal's current contract.
+/// Foundation also classifies U+0085 and U+200B as whitespace while Kotlin
+/// does not, and Kotlin includes U+001C..U+001F that Foundation excludes.
+/// Pin the BMP set so habits persist under the same canonical key on both
+/// platforms rather than allowing OS Unicode tables to drift.
+private func isAndroidJournalWhitespace(_ scalar: Unicode.Scalar) -> Bool {
+    switch scalar.value {
+    case 0x0009...0x000D, 0x001C...0x0020, 0x00A0, 0x1680,
+         0x2000...0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000:
+        return true
+    default:
+        return false
+    }
 }
