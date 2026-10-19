@@ -247,8 +247,13 @@ fun InsightsScreen(vm: AppViewModel, onOpenInsightsHub: () -> Unit = {}) {
         // A historical row would otherwise be fabricated as though the user observed today.
         // Only the explicit Copy button below can persist a fresh day's answers.
         val yesterdayAnswers = if (dayOffset == 0L) {
-            native.filter { it.day == journalDayKey(1L) }
-                .associate { it.question to it.answeredYes }
+            // A numeric journal row also says answeredYes=true, but without its actual
+            // numericValue copying that bit would invent a dose-independent observation.
+            // Only current, visible boolean prompts may be copied after confirmation.
+            val eligible = resolveJournalItems(importedQuestions, catalogItems)
+                .filterNot { it.kind.isNumeric }
+                .mapTo(hashSetOf()) { normJournalKey(it.canonical) }
+            previousBooleanJournalAnswers(native, journalDayKey(1L), eligible)
         } else emptyMap()
         // Imported WHOOP answers are observations too; do not offer a blanket copy that
         // would overwrite today's imported evidence with a native row.
