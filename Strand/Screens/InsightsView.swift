@@ -836,7 +836,12 @@ struct InsightsView: View {
         let baselineValues = baselineDays.compactMap { outcomeDays[$0] }
         let interventionValues = interventionDays.compactMap { outcomeDays[$0] }
         let daysElapsed = max(1, min(duration, dayDistance(from: experimentStartedDay, to: today) + 1))
-        let complianceFraction = Double(interventionDays.count) / Double(max(daysElapsed, 1))
+        // A Journal Yes counts as done even when no wearable outcome was recorded.
+        // The intervention mean still uses only days with measured outcomes.
+        let complianceFraction = ExperimentAdherence.fraction(
+            yesDays: loggedDays, startedDay: experimentStartedDay,
+            today: today, durationDays: duration
+        )
         let confidence = experimentConfidence(baselineCount: baselineValues.count,
                                               interventionCount: interventionValues.count,
                                               compliance: complianceFraction)
