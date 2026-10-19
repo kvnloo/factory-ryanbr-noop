@@ -38,4 +38,16 @@ class ExperimentAdherenceTest {
         assertEquals(0.0, ExperimentAdherence.fraction(
             emptySet(), "2026-10-19", "2026-10-19", 14), 1e-12)
     }
+
+    @Test fun sensorObservationsAfterWindowCannotExtendExperiment() {
+        val observedDays = listOf("2026-10-14", "2026-10-15", "2026-10-17",
+            "2026-10-21", "2026-10-22", "2026-10-30", "invalid")
+        val eligible = observedDays.filter {
+            ExperimentAdherence.includes(it, "2026-10-15", "2026-10-30", 7)
+        }
+        assertEquals(listOf("2026-10-15", "2026-10-17", "2026-10-21"), eligible)
+        assertEquals(false, ExperimentAdherence.includes(
+            "2026-10-21", "2026-10-15", "2026-10-19", 7))
+    }
+
 }
