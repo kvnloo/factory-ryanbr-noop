@@ -96,7 +96,16 @@ internal fun TwoMinuteHabitComposer(
                 kind = NoopButtonKind.Secondary,
                 enabled = question != null && !exists,
                 fullWidth = true,
-                onClick = { question?.let(onAdd) },
+                onClick = {
+                    if (question != null && !exists) {
+                        onAdd(question)
+                        // Creation is metadata-only; reset the draft so another tiny
+                        // action can be added without clearing two fields manually.
+                        // This does not mark a Journal Yes or No.
+                        cue = ""
+                        action = ""
+                    }
+                },
             )
             if (exists) {
                 Text(
