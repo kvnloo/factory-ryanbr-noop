@@ -151,6 +151,8 @@ fun DataSourcesScreen(vm: AppViewModel) {
     // export so each card reflects its own data rather than both showing under Apple Health (issue #34).
     var hcDays by remember { mutableStateOf<Int?>(null) }
     var hcWorkouts by remember { mutableStateOf<Int?>(null) }
+    // Writer APP origins from the last completed import; not watch models or live pairing.
+    var hcOriginApps by remember { mutableStateOf<List<String>>(emptyList()) }
     // Nutrition CSV writes long-format metricSeries rows under its own source ("nutrition-csv"),
     // so its card counts days-with-calories and weigh-ins straight off that table.
     var nutritionDays by remember { mutableStateOf<Int?>(null) }
@@ -182,6 +184,7 @@ fun DataSourcesScreen(vm: AppViewModel) {
         appleWorkouts = vm.repo.workoutsCount("apple-health", 0L, nowS)
         hcDays = vm.repo.appleDailyCount("health-connect", "0000-01-01", "9999-12-31")
         hcWorkouts = vm.repo.workoutsCount("health-connect", 0L, nowS)
+        hcOriginApps = HealthConnectImporter.lastImportedSourceNames(context)
         nutritionDays = vm.repo.metricSeriesKeyCount(NutritionCsvImporter.SOURCE_ID, "calories_in")
         nutritionWeighIns = vm.repo.metricSeriesKeyCount(NutritionCsvImporter.SOURCE_ID, "weight")
         liftingWorkouts = vm.repo.workoutsCount(LiftingImporter.SOURCE_ID, 0L, nowS)
@@ -506,6 +509,21 @@ fun DataSourcesScreen(vm: AppViewModel) {
                 CountLine(
                     primary = hcDays?.let { "$it days" } ?: "—",
                     secondary = hcWorkouts?.let { "$it workouts" } ?: "Counting…",
+                )
+            }
+            if (hcOriginApps.isNotEmpty()) {
+                val shown = hcOriginApps.take(4).joinToString(", ")
+                val remaining = hcOriginApps.size - 4
+                Text(
+                    "Writing apps in last import: " + shown +
+                        (if (remaining > 0) " (+$remaining more)" else ""),
+                    style = NoopType.footnote,
+                    color = Palette.textSecondary,
+                )
+                Text(
+                    "These are data-writing apps, not verified watch models.",
+                    style = NoopType.footnote,
+                    color = Palette.textTertiary,
                 )
             }
             if (healthConnectAvailable) {
