@@ -167,11 +167,25 @@ final class JournalCatalogStore: ObservableObject {
     /// them onto one key. The DISPLAYED string is still the original verbatim text, only the match
     /// key is normalised, so the stored behaviour key (which the effects engine joins on) is intact.
     /// Kept value-for-value in step with Android `normJournalKey` (JournalLog.kt).
+    /// Foundation's whitespace set is NOT identical to Kotlin Char.isWhitespace:
+    /// it includes U+0085/U+200B and excludes U+001C...U+001F. Use the proven
+    /// UTF-16/BMP Unicode set shared by the Android journal instead. This only
+    /// changes identity matching; persisted canonical question strings stay intact.
     nonisolated static func norm(_ s: String) -> String {
-        s.components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-            .lowercased()
+        var result = ""
+        var pendingSpace = false
+        for scalar in s.unicodeScalars {
+            switch scalar.value {
+            case 0x0009...0x000D, 0x001C...0x0020, 0x00A0, 0x1680,
+                 0x2000...0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000:
+                if !result.isEmpty { pendingSpace = true }
+            default:
+                if pendingSpace { result.append(" ") }
+                result.unicodeScalars.append(scalar)
+                pendingSpace = false
+            }
+        }
+        return result.lowercased()
     }
 
     /// The merged catalog resolved into full v2 items, grouped and ordered for display. Imported +
