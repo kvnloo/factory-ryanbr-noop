@@ -586,7 +586,7 @@ private fun JournalRemoveButton(isCustom: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun journalFieldColors() = OutlinedTextFieldDefaults.colors(
+internal fun journalFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = Palette.textPrimary,
     unfocusedTextColor = Palette.textPrimary,
     disabledTextColor = Palette.textTertiary,
