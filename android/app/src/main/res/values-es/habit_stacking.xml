@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="habit_stack_title">Hábito de dos minutos</string>
+    <string name="habit_stack_explainer">Elige una señal y una acción pequeña. Guárdalas en el diario y responde Sí o No cuando corresponda.</string>
+    <string name="habit_stack_cue">Después de esta señal</string>
+    <string name="habit_stack_action">Haz esta pequeña acción</string>
+    <string name="habit_stack_add">Añadir al diario</string>
+    <string name="habit_stack_existing">Ya está en tu diario</string>
+</resources>

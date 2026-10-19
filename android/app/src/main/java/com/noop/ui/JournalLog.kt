@@ -269,6 +269,15 @@ fun JournalLogCard(
                 }
                 JournalDivider()
                 JournalAddRow(onAddCustom = onAddCustom)
+                // A habit stack is a regular, user-owned Journal question — no second
+                // habit database or scoring path. Yes/No/unknown remain the same tri-state.
+                if (!editing) {
+                    JournalDivider()
+                    TwoMinuteHabitComposer(
+                        items = items,
+                        onAdd = { question -> onAddCustom(question, JournalKind.Bool, JournalGroup.Behaviour) },
+                    )
+                }
             }
         }
     }
