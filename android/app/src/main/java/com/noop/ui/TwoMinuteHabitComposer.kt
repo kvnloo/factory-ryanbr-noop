@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -66,6 +67,9 @@ internal fun TwoMinuteHabitComposer(
                 onValueChange = { cue = it },
                 label = { Text(stringResource(R.string.habit_stack_cue)) },
                 singleLine = true,
+                textStyle = NoopType.body,
+                colors = journalFieldColors(),
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
@@ -73,6 +77,9 @@ internal fun TwoMinuteHabitComposer(
                 onValueChange = { action = it },
                 label = { Text(stringResource(R.string.habit_stack_action)) },
                 singleLine = true,
+                textStyle = NoopType.body,
+                colors = journalFieldColors(),
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth(),
             )
             NoopButton(
