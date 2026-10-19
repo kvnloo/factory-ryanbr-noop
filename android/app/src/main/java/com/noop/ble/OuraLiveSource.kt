@@ -19,6 +19,9 @@ import android.content.SharedPreferences
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import com.noop.oura.OuraAcmCodec
+import com.noop.oura.OuraTapDetector
 import android.os.ParcelUuid
 import com.noop.data.OuraStreamMapping
 import com.noop.data.StreamBatch
@@ -454,6 +457,81 @@ class OuraLiveSource(
     /** Cached characteristics, resolved in onServicesDiscovered. */
     private var writeChar: BluetoothGattCharacteristic? = null
     private var notifyChar: BluetoothGattCharacteristic? = null
+
+    // A bounded, user-armed accelerometer session on the EXISTING Oura BLE link.
+    // No new scan, pairing takeover, health-data path or always-on sampling.
+    private val tapDetector = OuraTapDetector()
+    private var tapSink: ((OuraTapDetector.Gesture) -> Unit)? = null
+    private var tapEpoch = 0L
+    private var lastTapSampleMs = -1L
+    private var tapCaptureUntilMs = 0L
+    private val tapCaptureTimeout = Runnable { stopGestureCapture() }
+
+    /** User-visible onboarding must call this on main; only an authenticated Gen 3 ring qualifies. */
+    fun startGestureCapture(seconds: Int, onGesture: (OuraTapDetector.Gesture) -> Unit): Boolean {
+        require(Looper.myLooper() == Looper.getMainLooper()) { "Gesture capture must be armed on main" }
+        if (seconds !in 1..300 || ringGen != OuraRingGen.GEN3
+            || driver?.phase != OuraDriverPhase.Streaming
+            || _linkPhase.value != LinkPhase.AUTHENTICATED
+            || gatt == null || writeChar == null || tapSink != null) return false
+        tapEpoch++
+        tapDetector.reset()
+        lastTapSampleMs = -1
+        tapSink = onGesture
+        tapCaptureUntilMs = SystemClock.elapsedRealtime() + seconds * 1000L
+        lastWriteAccepted = false
+        write(OuraCommand("gesture_acm_on", OuraAcmCodec.enableForSeconds(seconds)))
+        if (!lastWriteAccepted) {
+            tapSink = null
+            tapCaptureUntilMs = 0
+            tapEpoch++
+            tapDetector.reset()
+            return false
+        }
+        handler.removeCallbacks(tapCaptureTimeout)
+        handler.postDelayed(tapCaptureTimeout, seconds * 1000L)
+        log("Oura: bounded gesture training armed for "+seconds+"s")
+        return true
+    }
+
+    /** OFF is best effort when Bluetooth has disconnected; the ring's timebox still expires. */
+    fun stopGestureCapture() {
+        handler.removeCallbacks(tapCaptureTimeout)
+        val armed = tapSink != null
+        tapSink = null
+        tapCaptureUntilMs = 0
+        tapEpoch++
+        lastTapSampleMs = -1
+        tapDetector.reset()
+        if (armed && gatt != null && writeChar != null) {
+            write(OuraCommand("gesture_acm_off", OuraAcmCodec.stop()))
+        }
+    }
+
+    /** Strict 0x33 parsing and ordered main-thread detector delivery. */
+    private fun onGestureAcm(frame: OuraOuterFrame) {
+        if (tapSink == null || ringGen != OuraRingGen.GEN3) return
+        val wire = ByteArray(frame.body.size + 2)
+        wire[0] = 0x33
+        wire[1] = frame.body.size.toByte()
+        frame.body.forEachIndexed { i, b -> wire[i + 2] = b.toByte() }
+        val axes = OuraAcmCodec.decode(wire)
+        if (axes.isEmpty()) return
+        val epoch = tapEpoch
+        handler.post {
+            if (epoch != tapEpoch || tapSink == null) return@post
+            if (SystemClock.elapsedRealtime() >= tapCaptureUntilMs) {
+                stopGestureCapture()
+                return@post
+            }
+            for (axis in axes) {
+                val stamp = maxOf(SystemClock.elapsedRealtime(), lastTapSampleMs + 20)
+                lastTapSampleMs = stamp
+                val gesture = tapDetector.sample(stamp, axis.x, axis.y, axis.z)
+                if (gesture != null && epoch == tapEpoch) tapSink?.invoke(gesture)
+            }
+        }
+    }
 
     // MARK: - Auth watchdog (#2304)
 
@@ -1344,6 +1422,7 @@ class OuraLiveSource(
         // disconnect follows in the next statement and nothing guarantees a flush. It closes the common
         // cases -- user disconnect, source switch, Bluetooth off -- and a process kill cannot be covered
         // at all, which is a transport limit rather than a gap in this fix.
+        stopGestureCapture() // send realtime-OFF before disconnect
         disableLiveHR()
         driver?.stop()
         gatt?.let { runCatching { it.disconnect(); it.close() } }
@@ -1484,6 +1563,7 @@ class OuraLiveSource(
                     g.discoverServices()
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
+                    stopGestureCapture() // disarm on spontaneous link loss
                     log("Oura: disconnected (status=$status)")
                     _linkPhase.value = LinkPhase.DISCONNECTED
                     loggedFirstHr = false   // a reconnect should log its first sample again
@@ -1874,7 +1954,9 @@ class OuraLiveSource(
                     }
                 }
             }
-            if (frame.op == OuraFraming.secureSessionOp) {
+            if (frame.op == 0x33) {
+                onGestureAcm(frame) // realtime ACM, not a banked health event
+            } else if (frame.op == OuraFraming.secureSessionOp) {
                 val secure = OuraFraming.parseSecureFrame(frame) ?: continue
                 routeSecure(d, secure)
             } else if (frame.op == SET_AUTH_KEY_RESP_OP) {
