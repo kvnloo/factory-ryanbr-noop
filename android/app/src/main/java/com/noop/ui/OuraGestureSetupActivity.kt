@@ -42,6 +42,7 @@ class OuraGestureSetupActivity : Activity() {
     private val broker by lazy { OuraGestureBroker(this) }
     private val export = Executors.newSingleThreadExecutor()
     private var claiming = false
+    private var pairingInProgress = false
     // Read by the single-thread export worker; Stop invalidates queued events immediately.
     @Volatile private var claimGeneration = 0
     private var armed = false
@@ -116,6 +117,8 @@ class OuraGestureSetupActivity : Activity() {
         column.addView(pairing)
         button(getString(R.string.oura_broker_pair)) {
             disarm()
+            pairingInProgress = true
+            arm.isEnabled = false
             val link = pairing.text.toString()
             pairing.text.clear()
             val generation = claimGeneration
@@ -130,6 +133,8 @@ class OuraGestureSetupActivity : Activity() {
                 }.isSuccess
                 handler.post {
                     if (generation == claimGeneration && !isDestroyed) {
+                        pairingInProgress = false
+                        arm.isEnabled = true
                         status.text = getString(
                             if (paired) R.string.oura_broker_paired else R.string.oura_broker_failed
                         )
@@ -147,7 +152,9 @@ class OuraGestureSetupActivity : Activity() {
     private val coordinator get() = (application as NoopApplication).sourceCoordinator
 
     private fun begin(leaseReady: Boolean = false) {
-        if (armed || claiming) return
+        // Never start a local-only gesture capture while the optional broker
+        // credentials are still being replaced on the export worker.
+        if (armed || claiming || pairingInProgress) return
         if (Build.VERSION.SDK_INT >= 31 &&
             (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED ||
                 checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)) {
@@ -267,6 +274,7 @@ class OuraGestureSetupActivity : Activity() {
     private fun disarm() {
         claimGeneration++
         claiming = false
+        pairingInProgress = false
         export.execute { runCatching { broker.release() } }
         if (armed) coordinator.stopActiveOuraGestureCapture()
         armed = false
