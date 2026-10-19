@@ -7,6 +7,8 @@
 
 ## Goal
 
+**Mission:** Democratize healthspan-supporting preventive habits through affordable, accessible, privacy-preserving self-observation and small, sustainable lifestyle changes. Clinical feedback is requested on *comprehension, appropriate low-risk behavior framing, burden and inclusivity* — not as proof of medical efficacy.
+
 NOOP makes wearable data available offline and locally. How do we improve the **user's ability to understand a trend, judge its uncertainty, and choose one appropriate, low-risk action**, rather than just showing more numbers?
 
 Seek practitioner/clinician and real-user **UX critique**, not endorsement, diagnosis, clinical validation, or treatment advice.
@@ -50,3 +52,19 @@ A prioritized list of **three changes to existing screens/copy**, plus concrete 
 **Boundaries:** offline/on-device; no patient data or uploaded records; NOOP is not a medical device; no claims of health efficacy, diagnosis, prescriptions, automatic treatment or user behavior change. See https://github.com/ryanbr/noop/blob/main/docs/SCOPE.md and https://github.com/ryanbr/noop/blob/main/docs/CONTRIBUTING.md.
 
 **Provenance:** NOOP maintainers and earlier contributors own the existing Journal, metrics, Rest resolver, and Coach flows; this consolidates downstream experiments and requests feedback rather than asserting those systems were invented here.
+
+## October 19 downstream UX and equity context (fork-only, not approved upstream)
+
+- [#51 Contextual minimal Today](https://github.com/kvnloo/factory-ryanbr-noop/pull/51): Android opt-in, reversible two-destination home and single contextual prompt. UX/device validation pending. Distinct from upstream [Simple view #2463](https://github.com/ryanbr/noop/issues/2463); do not launch a competing default redesign.
+- [#52 Wearable data provenance](https://github.com/kvnloo/factory-ryanbr-noop/pull/52): distinguish *Health Connect writing app* (e.g. Samsung Health) from an unverified watch model. Broadening access across popular wearables is a research direction, **not** proof of direct Apple Watch/Galaxy Watch compatibility.
+- [#53 Journal no-autocopy fix](https://github.com/kvnloo/factory-ryanbr-noop/pull/53): Android screen visit must not silently turn yesterday's Yes/No answers into today's evidence. Exact-head CI and manual sanity pending.
+- [#54 Two-minute Journal habits](https://github.com/kvnloo/factory-ryanbr-noop/pull/54): experimental opt-in cue → tiny action → explicit self-entered Yes/No. Missing remains missing; no parallel habit system. CI, accessibility, iOS parity and user validation pending.
+
+### What to evaluate before making humanitarian-impact claims
+
+- **Access:** Can someone benefit with limited time, money, digital literacy, or no expensive wearable? Is imported-device support honest about source and coverage? Consider translated, screen-reader-friendly, low-vision and low-bandwidth paths.
+- **Understanding and agency:** Can users distinguish measured data, estimated wellness scores, associations and unknowns; choose/decline a tiny action without guilt; and see the reason for any prompt?
+- **Follow-through:** Prefer a self-selected, practical behavior and user-reported completion to engagement, streaks, or push-volume metrics. Monitor burden and opt-out.
+- **Evidence and safety:** Test interpretation/comprehension with synthetic data first, then consented non-clinical usability studies. Any health-outcome claim needs an appropriate prospective study, defined endpoints, clinician oversight and population-representative data; observational associations aren't causal evidence.
+
+**Doctor's high-value answer:** Which three *existing-screen/copy* changes would you prioritize for accessibility, accurate interpretation and sustainable adherence, and what wording/signal would you explicitly avoid?
