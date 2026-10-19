@@ -1,0 +1,82 @@
+# Fork-only QA: never merge into ryanbr/noop. One exact-source debug APK for owner/ADB consent testing.
+name: Health Connect retry APK (fork QA)
+
+on:
+  push:
+    branches: [qa/android-healthconnect-retry-apk-20261019]
+    paths:
+      - '.github/workflows/healthconnect-retry-owner-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: noop-healthconnect-retry-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    if: github.repository_owner == 'kvnloo'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Assert product source matches reviewed PR #55
+        env:
+          SOURCE_COMMIT: 5a00d0895e4c885e80f16408a24bcb032b43ef00
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$SOURCE_COMMIT"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/healthconnect-retry-owner-apk.yml"
+          echo "Exactly PR #55 product source; only this QA workflow differs."
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/wrapper-validation@v5
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Run Android unit tests and build sideloadable debug APK
+        working-directory: android
+        run: ./gradlew testFullDebugUnitTest assembleFullDebug --no-build-cache --rerun-tasks
+      - name: Verify Android package, signing certificate and SHA-256
+        working-directory: android
+        run: |
+          set -euo pipefail
+          apk="$(find app/build/outputs/apk/full/debug -maxdepth 1 -name '*.apk' -type f | head -1)"
+          test -n "$apk"
+          mkdir -p dist
+          cp "$apk" dist/NOOP-HealthConnect-retry-debug.apk
+          SDKTOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          "$SDKTOOLS/apksigner" verify --print-certs dist/NOOP-HealthConnect-retry-debug.apk > dist/certificate.txt
+          "$SDKTOOLS/aapt" dump badging dist/NOOP-HealthConnect-retry-debug.apk | grep -E '^(package:|sdkVersion:|targetSdkVersion:)' | tee dist/package.txt
+          grep -q "package: name='com.noop.whoop.debug'" dist/package.txt
+          (cd dist && sha256sum NOOP-HealthConnect-retry-debug.apk > SHA256SUMS)
+          printf 'repository=%s\nqa_commit=%s\nproduct_source_commit=%s\nrun=%s\nplatform=Android\nflavor=fullDebug\n' \
+            "$GITHUB_REPOSITORY" "$GITHUB_SHA" "5a00d0895e4c885e80f16408a24bcb032b43ef00" "$GITHUB_RUN_ID" > dist/build-info.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NOOP-HealthConnect-retry-${{ github.sha }}
+          path: android/dist/*
+          retention-days: 30
+          if-no-files-found: error
+      - name: Publish immutable fork-only owner test APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: android
+        run: |
+          set -euo pipefail
+          tag="noop-hc-retry-${GITHUB_SHA:0:12}"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Already published: $tag"
+            exit 0
+          fi
+          gh release create "$tag" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "NOOP Android Health Connect retry owner QA ${GITHUB_SHA:0:12}" --prerelease --latest=false \
+            --notes "Fork-only debug APK to validate Health Connect import retry and local sync status after permission denial, SDK read failure and a genuinely empty successful scan. The PRODUCT SOURCE matches NOOP fork PR #55 at 5a00d0895e4c885e80f16408a24bcb032b43ef00; this QA commit adds only the workflow. Includes JVM regression tests, package/certificate verification and SHA-256. The com.noop.whoop.debug app has separate data from official NOOP. No physical device testing or upstream review is claimed. Owner/Hermes ADB test checklist: https://github.com/kvnloo/noop/issues/69"
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url,assets
