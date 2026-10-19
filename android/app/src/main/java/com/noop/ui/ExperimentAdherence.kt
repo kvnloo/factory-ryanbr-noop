@@ -19,4 +19,13 @@ internal object ExperimentAdherence {
         }
         return completed.toDouble() / elapsed
     }
+
+    /** Prevent late-arriving wearable samples from extending an already-ended plan. */
+    fun includes(day: String, startedDay: String, today: String, durationDays: Int): Boolean {
+        val start = runCatching { LocalDate.parse(startedDay) }.getOrNull() ?: return false
+        val end = runCatching { LocalDate.parse(today) }.getOrNull() ?: return false
+        val observed = runCatching { LocalDate.parse(day) }.getOrNull() ?: return false
+        return !observed.isBefore(start) && !observed.isAfter(end) &&
+            ChronoUnit.DAYS.between(start, observed) < durationDays.coerceAtLeast(1)
+    }
 }
