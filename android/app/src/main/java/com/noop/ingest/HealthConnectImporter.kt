@@ -265,18 +265,27 @@ object HealthConnectImporter {
 
     private const val PERMISSION_SIGNATURE_KEY = "noop.hc.permissionSignature"
     private const val CATEGORY_SELECTION_KEY = "noop.hc.importCategories"
+    // App origin, never a claimed hardware model. Refreshed only after an import completes.
+    private const val LAST_IMPORTED_ORIGINS_KEY = "hc.lastImportOriginPackages"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(NoopPrefs.NAME, Context.MODE_PRIVATE)
 
+    fun lastImportedSourceNames(context: Context): List<String> =
+        HealthConnectSourceSummary.displayNames(
+            prefs(context).getStringSet(LAST_IMPORTED_ORIGINS_KEY, emptySet()).orEmpty(),
+        )
+
     /** #1735: stamp a COMPLETED import run so the diagnostics header can say when data last moved, not
      *  merely how many rows exist. Raw keys written inline, read back by AndroidDiagnostics - the same
      *  shape `sync.lastWriteOkAt` uses. Guarded: a stamp is never worth failing an import over. */
-    private fun recordImportRun(context: Context, rows: Int, throughDay: String?) {
+    private fun recordImportRun(context: Context, rows: Int, throughDay: String?,
+                                originPackages: Set<String>) {
         runCatching {
             prefs(context).edit()
                 .putLong("hc.lastImportOkAt", System.currentTimeMillis() / 1000)
                 .putInt("hc.lastImportRows", rows)
+                .putStringSet(LAST_IMPORTED_ORIGINS_KEY, originPackages.toSet())
                 .apply {
                     if (throughDay != null) putString("hc.lastImportThroughDay", throughDay)
                 }
@@ -359,6 +368,9 @@ object HealthConnectImporter {
         // #528: skip our own writes on import (see readAll / isSelfWritten).
         val selfPackage = context.packageName
         val selectedRecordTypes = readableRecordTypes(effectiveCategories, granted)
+        // Capture only the app that authored each readable record. We do not infer the watch model,
+        // merge devices, or change any scoring/WHOOP semantics.
+        val observedOriginPackages = linkedSetOf<String>()
 
         // A granted permission can outlive the category selection that originally requested it. Gate
         // on BOTH here so switching a category off stops its reads immediately without requiring the
@@ -369,7 +381,12 @@ object HealthConnectImporter {
             onRecord: (T) -> Unit,
         ): Boolean {
             if (type !in selectedRecordTypes) return false
-            return readAll(client, type, range, selfPackage, onRecord)
+            return readAll(client, type, range, selfPackage) { record ->
+                record.metadata.dataOrigin.packageName.takeIf { it.isNotBlank() }?.let {
+                    observedOriginPackages.add(it)
+                }
+                onRecord(record)
+            }
         }
 
         // Per-day accumulators. Keyed by "YYYY-MM-DD" (local).
@@ -733,7 +750,7 @@ object HealthConnectImporter {
         // strap-write path already uses. Best-effort - a stamp failure must not sink a good import.
             // Stamped on the EMPTY path too, deliberately: "ran and found nothing" and "never ran" are
             // different diagnoses and this is the only line that separates them.
-            recordImportRun(context, rows = 0, throughDay = null)
+            recordImportRun(context, rows = 0, throughDay = null, originPackages = observedOriginPackages)
             return ImportSummary(
                 source = SOURCE,
                 counts = emptyMap(),
@@ -893,7 +910,7 @@ object HealthConnectImporter {
         // there" cannot be told from "Health Connect never imported it" without this: the log had per-source
         // row counts but nothing about WHEN they last moved. Mirrors the sync.lastWriteOkAt pattern the
         // strap-write path already uses. Best-effort - a stamp failure must not sink a good import.
-        recordImportRun(context, rows = total, throughDay = lastDay)
+        recordImportRun(context, rows = total, throughDay = lastDay, originPackages = observedOriginPackages)
         return ImportSummary(
             source = SOURCE,
             counts = counts,
