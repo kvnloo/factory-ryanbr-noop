@@ -3,16 +3,22 @@
 **Status (2026-10-19): downstream feasibility recipe, not an efficacy experiment or upstream proposal.** This document belongs to the existing NOOP queue; do not create a second habit database, score, RFC or promotion issue.
 
 ## What exists
-- Android fork [contextual Today PR #51](https://github.com/kvnloo/factory-ryanbr-noop/pull/51) exposes the existing Breathe route beside Journal; manual user choice, no session auto-start and no claimed completion tracking.
+- Android fork [contextual Today PR #51](https://github.com/kvnloo/noop/pull/51) exposes the existing Breathe route beside Journal; manual user choice, no session auto-start and no claimed completion tracking.
 - Android and Apple NOOP already expose physiological metrics, Breathe functionality and Journal. Android's `JournalAddRow` permits a custom Boolean question with explicit Yes/No/unanswered, and its day picker offers **Tomorrow** for logging actions that may inform the next morning.
-- Fork [#49](https://github.com/kvnloo/factory-ryanbr-noop/pull/49) corrects experiment baseline selection to exclude unanswered days; [#46](https://github.com/kvnloo/factory-ryanbr-noop/pull/46) exercises existing Journal/metric recipe wiring using synthetic data. Both require independent review; do not treat either as clinical evidence.
+- Fork [#49](https://github.com/kvnloo/noop/pull/49) corrects experiment baseline selection to exclude unanswered days; [#46](https://github.com/kvnloo/noop/pull/46) exercises existing Journal/metric recipe wiring using synthetic data. Both require independent review; do not treat either as clinical evidence.
 
 ## Minimal manual walkthrough (14 nights for feasibility, not effect estimation)
-1. In Journal, make one custom **Yes/No** item, for example `Did I finish guided breathing before bed?` Record the exact canonical question key; do not invent a second factor taxonomy. If downstream [tiny-habit PR #61](https://github.com/kvnloo/factory-ryanbr-noop/pull/61) is enabled, **reuse its generated Journal question** instead of adding a duplicate entry. PR #61 is an independently held Android prototype, not a shipped upstream feature.
+1. In Journal, make one custom **Yes/No** item, for example `Did I finish guided breathing before bed?` Record the exact canonical question key; do not invent a second factor taxonomy. If downstream [habit PR #54](https://github.com/kvnloo/noop/pull/54) is enabled, **reuse its generated Journal question** rather than adding another entry. PR #61 was closed as an overlapping approach; the Apple parity prototype is [#63](https://github.com/kvnloo/noop/pull/63). Neither is shipped upstream.
 2. At the bedtime cue the user chooses, open **Today → Breathe** on Android and optionally complete a guided session. This navigation is a shortcut, not instrumentation or an intervention prescription.
 3. After a fresh 2+ minute Breathe session, the fork now offers **Log journal** directly on Breathe; alternatively use **Today → Journal**. Select **Tomorrow** when logging before that night's sleep, and explicitly answer **Yes** on a completed night, **No** on an observed night without completion, or leave unanswered if unknown. The answers remain self-reported; under-2-minute sessions show no completion shortcut.
 4. The next morning, inspect the Journal day attribution and existing sleep outcomes. Record whether a matching `sleep_efficiency` metric, sleep session and source/coverage exist. No sensor data: **no outcome**, not zero.
 5. Repeat solely to check app workflows, timestamp joins, explicit controls and export. A 14-night sample is not proof that breathing improves recovery or sleep.
+
+## Pilot-integrity blocker (must resolve before collecting real evidence)
+
+The standalone contextual Today [#51](https://github.com/kvnloo/noop/pull/51) still targets a fork base with the old Insights load path, which may silently carry yesterday's Journal answers into today. That makes any experimental compliance/correlation evidence unreliable. **Do not treat #51 alone as a safe longitudinal-pilot build.** First verify the build includes one independently reviewed no-implicit-copy fix: the minimal [#53](https://github.com/kvnloo/noop/pull/53) or explicit-confirmation [#58](https://github.com/kvnloo/noop/pull/58). Habit #54 currently composes with #58, but the composed app/device flow remains unverified. Never combine #53 and #58 blindly; both change the same Journal read semantics.
+
+The Android Breathe shortcut now explains **Tomorrow** attribution in English, German, Spanish, French and Portuguese with New Year/leap-day test vectors at [commit 1156204](https://github.com/kvnloo/noop/commit/1156204e460dc2cf3d4895d4b900c1a97ddd4792). This is guidance only, not an answer write or a statement of habit efficacy.
 
 ## Evaluation / failure gates
 - **Primary engineering outcome:** manual Breathe navigation, session UI, custom Journal answer and following-morning metric can be reconciled end-to-end on a real device without network or extra permissions.
