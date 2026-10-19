@@ -187,7 +187,7 @@ fun DataSourcesScreen(vm: AppViewModel) {
         // Health Connect identifies writing APPS, never verified watch models. Kept inline:
         // no new unpaired product helper declarations in NOOP's strict parity inventory.
         hcOriginApps = context.getSharedPreferences(NoopPrefs.NAME, Context.MODE_PRIVATE)
-            .getStringSet(HealthConnectImporter.LAST_IMPORTED_ORIGINS_KEY, emptySet()).orEmpty()
+            .getStringSet("hc.lastImportOriginPackages", emptySet()).orEmpty()
             .asSequence()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
