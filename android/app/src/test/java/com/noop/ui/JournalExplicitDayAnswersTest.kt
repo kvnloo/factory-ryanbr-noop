@@ -43,4 +43,13 @@ class JournalExplicitDayAnswersTest {
             explicitJournalDayAnswers(rows, "2026-10-19"),
         )
     }
+    @Test fun crossingCalendarYearNeverCarriesUnloggedControls() {
+        val rows = listOf(row("2025-12-31", "Did you complete your habit?", false))
+        assertEquals(emptyMap<String, Boolean>(), explicitJournalDayAnswers(rows, "2026-01-01"))
+        assertEquals(
+            mapOf("Did you complete your habit?" to false),
+            explicitJournalDayAnswers(rows, "2025-12-31"),
+        )
+    }
+
 }
