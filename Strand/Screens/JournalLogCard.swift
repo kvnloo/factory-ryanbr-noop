@@ -323,6 +323,12 @@ struct JournalLogCard: View {
     // MARK: - Two-minute habit (same canonical Journal question as Android)
 
     private var twoMinuteHabitComposer: some View {
+        // Resolve String Catalog entries outside Text(...). The i18n audit treats
+        // nested table-name literals inside Text as untranslated UI copy.
+        let description = String(localized: "Choose a cue and a tiny action. Save as a Journal question, then mark Yes or No yourself.", table: "HabitStacking")
+        let addLabel = String(localized: "Add to Journal", table: "HabitStacking")
+        let existingLabel = String(localized: "Already in your Journal", table: "HabitStacking")
+        let title = String(localized: "Two-minute habit", table: "HabitStacking")
         let proposal = twoMinuteHabitQuestion(habitCue, habitAction)
         // Include hidden questions: addCustom would reject the duplicate, so the
         // composer must not imply success for a previously hidden custom item.
@@ -333,7 +339,7 @@ struct JournalLogCard: View {
 
         return DisclosureGroup(isExpanded: $habitComposerExpanded) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(verbatim: String(localized: "Choose a cue and a tiny action. Save as a Journal question, then mark Yes or No yourself.", table: "HabitStacking"))
+                Text(verbatim: description)
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -352,12 +358,12 @@ struct JournalLogCard: View {
                         habitCue = ""
                         habitAction = ""
                     } label: {
-                        Text(verbatim: String(localized: "Add to Journal", table: "HabitStacking"))
+                        Text(verbatim: addLabel)
                     }
                     .buttonStyle(.bordered)
                     .disabled(proposal == nil || exists)
                     if exists {
-                        Text(verbatim: String(localized: "Already in your Journal", table: "HabitStacking"))
+                        Text(verbatim: existingLabel)
                             .font(StrandFont.footnote)
                             .foregroundStyle(StrandPalette.textSecondary)
                     }
@@ -365,7 +371,7 @@ struct JournalLogCard: View {
             }
             .padding(.top, 8)
         } label: {
-            Text(verbatim: String(localized: "Two-minute habit", table: "HabitStacking"))
+            Text(verbatim: title)
                 .font(StrandFont.body)
                 .foregroundStyle(StrandPalette.textPrimary)
         }
