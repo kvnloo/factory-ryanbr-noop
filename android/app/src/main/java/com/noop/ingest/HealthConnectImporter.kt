@@ -317,13 +317,18 @@ object HealthConnectImporter {
 
         // Refile any legacy Health Connect data that landed in the shared "apple-health" bucket before
         // #34 BEFORE importing, so a re-import refiles cleanly instead of duplicating across both sources.
-        try { repo.refileLegacyHealthConnect() } catch (_: Exception) { /* best-effort */ }
+        try { repo.refileLegacyHealthConnect() } catch (e: Exception) {
+            // A cancelled import is not a best-effort recovery failure.
+            if (e is kotlin.coroutines.cancellation.CancellationException) throw e
+        }
         // #112 follow-up heal: purge the shadow rows earlier imports wrote while the covered-days
         // gate missed active-strap ids — sparse HC-shaped "my-whoop" sleep/daily rows sitting over
         // nights the strap's computed ("-noop") source already covers. Runs BEFORE this import's
         // own gate is read so the healed coverage is what gets consulted. Idempotent, best-effort
         // like the refile above.
-        try { repo.purgeHcShadowedStrapDays() } catch (_: Exception) { /* best-effort */ }
+        try { repo.purgeHcShadowedStrapDays() } catch (e: Exception) {
+            if (e is kotlin.coroutines.cancellation.CancellationException) throw e
+        }
 
         val client = client(context)
 
@@ -331,6 +336,7 @@ object HealthConnectImporter {
         val granted = try {
             client.permissionController.getGrantedPermissions()
         } catch (e: Exception) {
+            if (e is kotlin.coroutines.cancellation.CancellationException) throw e
             return ImportSummary.failure(SOURCE, "Could not read Health Connect permissions: ${e.message}")
         }
         // #645 follow-up: a user who predates the category selector has nothing stored — recover their
@@ -734,8 +740,9 @@ object HealthConnectImporter {
                 .map { today.minusDays(it.toLong()).toString() }
             try {
                 HydrationStore.setImported(repo, HydrationStore.importWindow(windowDays, hydrationMl))
-            } catch (_: Exception) {
-                // Best-effort: a hydration write failure must not sink an otherwise good import.
+            } catch (e: Exception) {
+                // Hydration is best-effort, but cancellation must abort the sync.
+                if (e is kotlin.coroutines.cancellation.CancellationException) throw e
             }
         }
 
@@ -873,6 +880,7 @@ object HealthConnectImporter {
                 repo.upsertWorkouts(workouts)
             }
         } catch (e: Exception) {
+            if (e is kotlin.coroutines.cancellation.CancellationException) throw e
             return ImportSummary.failure(SOURCE, "Saving Health Connect data failed: ${e.message}")
         }
 
@@ -936,6 +944,7 @@ object HealthConnectImporter {
         val granted = try {
             client.permissionController.getGrantedPermissions()
         } catch (e: Exception) {
+            if (e is kotlin.coroutines.cancellation.CancellationException) throw e
             return null
         }
         if (HealthPermission.getReadPermission(StepsRecord::class) !in granted) return null
@@ -975,6 +984,7 @@ object HealthConnectImporter {
         val existing = try {
             repo.appleDaily(HC_DEVICE, dayKey, dayKey).firstOrNull()
         } catch (e: Exception) {
+            if (e is kotlin.coroutines.cancellation.CancellationException) throw e
             null
         }
         // Zero is indistinguishable from "no data yet today" — never overwrite a stored count with it.
@@ -986,6 +996,7 @@ object HealthConnectImporter {
             if (existing == null) repo.upsertDevice(HC_DEVICE, name = "Health Connect")
             repo.upsertAppleDaily(listOf(updated))
         } catch (e: Exception) {
+            if (e is kotlin.coroutines.cancellation.CancellationException) throw e
             return existing?.steps
         }
         return sum.toInt()
@@ -1052,6 +1063,7 @@ object HealthConnectImporter {
         try {
             coveredDaySet(repo.days(deviceId))
         } catch (e: Exception) {
+            if (e is kotlin.coroutines.cancellation.CancellationException) throw e
             emptySet()
         }
 
@@ -1067,6 +1079,7 @@ object HealthConnectImporter {
                 isStrapNativeSourceId(it)
             }
         } catch (e: Exception) {
+            if (e is kotlin.coroutines.cancellation.CancellationException) throw e
             setOf(WHOOP, WHOOP_COMPUTED)
         }
 
