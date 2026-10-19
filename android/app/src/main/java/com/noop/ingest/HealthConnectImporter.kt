@@ -935,7 +935,8 @@ object HealthConnectImporter {
      * REPLACES the whole row, so a fresh steps-only row would null every other column.
      *
      * Returns the live sum, or the stored count when today read zero, or null when Health Connect
-     * is unavailable / steps aren't granted / there's nothing at all. Never throws.
+     * is unavailable / steps aren't granted / there's nothing at all. Ordinary read/storage failures
+     * are swallowed; coroutine cancellation propagates so a stopped caller cannot keep syncing.
      */
     suspend fun refreshTodaySteps(context: Context, repo: WhoopRepository): Int? {
         if (sdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) return null
