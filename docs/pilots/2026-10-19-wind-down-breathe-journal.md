@@ -10,7 +10,7 @@
 ## Minimal manual walkthrough (14 nights for feasibility, not effect estimation)
 1. In Journal, make a custom **Yes/No** item, for example `Did I finish guided breathing before bed?` Record the exact canonical question key; do not invent a second factor taxonomy.
 2. At the bedtime cue the user chooses, open **Today → Breathe** on Android and optionally complete a guided session. This navigation is a shortcut, not instrumentation or an intervention prescription.
-3. Use **Today → Journal**, select **Tomorrow** when logging before that night's sleep, and explicitly answer **Yes** on a completed night, **No** on an observed night without completion, or leave unanswered if unknown. The answers remain self-reported.
+3. After a fresh 2+ minute Breathe session, the fork now offers **Log journal** directly on Breathe; alternatively use **Today → Journal**. Select **Tomorrow** when logging before that night's sleep, and explicitly answer **Yes** on a completed night, **No** on an observed night without completion, or leave unanswered if unknown. The answers remain self-reported; under-2-minute sessions show no completion shortcut.
 4. The next morning, inspect the Journal day attribution and existing sleep outcomes. Record whether a matching `sleep_efficiency` metric, sleep session and source/coverage exist. No sensor data: **no outcome**, not zero.
 5. Repeat solely to check app workflows, timestamp joins, explicit controls and export. A 14-night sample is not proof that breathing improves recovery or sleep.
 
