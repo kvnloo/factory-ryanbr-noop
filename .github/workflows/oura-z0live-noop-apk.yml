@@ -18,7 +18,9 @@ concurrency:
 
 jobs:
   android:
-    if: github.repository == 'kvnloo/factory-ryanbr-noop'
+    # Restrict release publication to this owner, without pinning the repo's
+    # mutable name (factory-ryanbr-noop was renamed to noop in October 2026).
+    if: github.repository_owner == 'kvnloo'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
