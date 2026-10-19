@@ -512,18 +512,15 @@ fun DataSourcesScreen(vm: AppViewModel) {
                 )
             }
             if (hcOriginApps.isNotEmpty()) {
+                // Names are Health Connect *writer apps*, not inferred hardware. Reuse an existing
+                // localized source label instead of adding untranslated hardcoded UI copy.
                 val shown = hcOriginApps.take(4).joinToString(", ")
                 val remaining = hcOriginApps.size - 4
                 Text(
-                    "Writing apps in last import: " + shown +
-                        (if (remaining > 0) " (+$remaining more)" else ""),
+                    uiString(R.string.l10n_health_screen_source_6da13add) + ": " + shown +
+                        (if (remaining > 0) " +$remaining" else ""),
                     style = NoopType.footnote,
                     color = Palette.textSecondary,
-                )
-                Text(
-                    "These are data-writing apps, not verified watch models.",
-                    style = NoopType.footnote,
-                    color = Palette.textTertiary,
                 )
             }
             if (healthConnectAvailable) {
