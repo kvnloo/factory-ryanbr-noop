@@ -1320,8 +1320,17 @@ internal fun experimentExplicitNoBaselineDays(
     before: String,
     limit: Int,
 ): List<String> =
-    outcomeDays.keys.filter { it < before && it in explicitNoDays }
+    outcomeDays.keys.filter { it < before && it in explicitNoDays && outcomeDays[it]?.isFinite() == true }
         .sorted().takeLast(limit.coerceAtLeast(1))
+
+/** Window used by the experiment. A NaN/Infinity observation is not a measured day
+ * and cannot consume one of the limited comparison slots (Swift twin above). */
+internal fun experimentValidObservationDays(
+    outcomeDays: Map<String, Double>,
+    from: String, through: String, limit: Int,
+): List<String> =
+    outcomeDays.keys.filter { it >= from && it <= through && outcomeDays[it]?.isFinite() == true }
+        .sorted().take(limit.coerceAtLeast(1))
 
 private fun buildExperimentSnapshot(
     model: InsightModel,
@@ -1349,10 +1358,10 @@ private fun buildExperimentSnapshot(
     )
     // Intervention = the first `duration` outcome days from the start where the
     // behaviour WAS logged.
-    val interventionWindow = outcomeDays.keys
-        .filter { it >= startedDay && it <= today }
-        .sorted()
-        .take(duration)
+    val interventionWindow = experimentValidObservationDays(
+        outcomeDays = outcomeDays, from = startedDay,
+        through = today, limit = duration,
+    )
     val interventionKeys = interventionWindow.filter { it in loggedDays }
 
     val baselineValues = baselineKeys.mapNotNull { outcomeDays[it] }

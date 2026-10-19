@@ -45,4 +45,28 @@ final class ExperimentBaselineControlsTests: XCTestCase {
                 outcomeDays: ["2026-09-02": 99], explicitNoDays: noDays,
                 before: "2026-09-06", limit: 14), [])
     }
+
+    func testNonFiniteBaselineValuesAreNeverCountedAsObservations() {
+        var damaged = outcomes
+        damaged["2026-09-03"] = .nan
+        damaged["2026-09-05"] = .infinity
+        XCTAssertEqual(
+            experimentExplicitNoBaselineDays(
+                outcomeDays: damaged, explicitNoDays: noDays,
+                before: "2026-09-06", limit: 14),
+            ["2026-09-01"])
+    }
+
+    func testNonFiniteInterventionDaysDoNotConsumeValidObservationSlots() {
+        let measured: [String: Double] = [
+            "2026-09-06": 71, "2026-09-07": .nan,
+            "2026-09-08": 72, "2026-09-09": -.infinity,
+            "2026-09-10": 73,
+        ]
+        XCTAssertEqual(
+            experimentValidObservationDays(
+                outcomeDays: measured, from: "2026-09-06",
+                through: "2026-09-10", limit: 2),
+            ["2026-09-06", "2026-09-08"])
+    }
 }
