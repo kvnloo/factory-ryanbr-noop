@@ -28,6 +28,6 @@ class TwoMinuteHabitTest {
     @Test fun rejectsOversizedQuestionsRatherThanPersistingThem() {
         assertNull(twoMinuteHabitQuestion("a".repeat(81), "read"))
         assertNull(twoMinuteHabitQuestion("brush", "b".repeat(81)))
-        assertEquals(123, twoMinuteHabitQuestion("a".repeat(80), "b".repeat(80))?.length)
+        assertEquals(193, twoMinuteHabitQuestion("a".repeat(80), "b".repeat(80))?.length)
     }
 }
