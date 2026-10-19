@@ -706,6 +706,7 @@ object HealthConnectImporter {
                 hydrationMl[day] = (hydrationMl[day] ?: 0.0) + r.volume.inMilliliters
             }
         } catch (e: Exception) {
+            rethrowIfCancelled(e)
             return ImportSummary.failure(SOURCE, "Health Connect read failed: ${e.message}")
         }
         if (everySelectedHealthReadFailed(selectedReadsAttempted, selectedReadsCompleted)) {
@@ -1029,6 +1030,7 @@ object HealthConnectImporter {
                 pageToken = response.pageToken
             } while (pageToken != null)
         } catch (e: Exception) {
+            rethrowIfCancelled(e)
             // One record type failing (e.g. a device/SDK validation quirk like "count must not be less
             // than 1" seen on some Health Connect builds) must NOT abort the whole import — log it and
             // keep whatever was read, so every other data type still comes in (issue #34). The reads
@@ -1151,6 +1153,11 @@ object HealthConnectImporter {
     /** A selected type with zero matching records is a completed read, not a failed read. */
     internal fun everySelectedHealthReadFailed(attempted: Int, completed: Int): Boolean =
         attempted > 0 && completed == 0
+
+    /** Cancellation ends the entire sync; it is not a recoverable per-record-type SDK failure. */
+    internal fun rethrowIfCancelled(error: Exception) {
+        if (error is kotlin.coroutines.cancellation.CancellationException) throw error
+    }
 
     /**
      * #1002: which local civil day a record belongs to, keyed by the offset the record was RECORDED
