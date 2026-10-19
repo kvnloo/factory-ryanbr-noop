@@ -143,6 +143,7 @@
         <!-- So the connection helper can detect the official WHOOP app and deep-link to its
              info screen (a strap only pairs with one app at a time). Android 11+ visibility. -->
         <package android:name="com.whoop.android" />
+        <package android:name="app.lawnchair.play.debug" />
         <!-- #386: OEM security-centre packages, so BackgroundHealth.oemAutostartIntent's
              resolveActivity can SEE their auto-start screens under Android 11+ package-visibility
              filtering (targetSdk 34) — without these the deep-link would silently never resolve on
@@ -167,6 +168,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.NOOP"
         tools:targetApi="34">
+
+        <!-- Explicit z0live onboarding target: visible user-confirmed BLE sampling only. -->
+        <activity android:name="com.noop.oura.OuraGestureSetupActivity"
+            android:exported="true" android:excludeFromRecents="true"
+            android:label="Oura gesture setup" android:theme="@style/Theme.NOOP" />
 
         <!--
           MainActivity no longer carries the LAUNCHER intent-filter itself. The home-screen entry
