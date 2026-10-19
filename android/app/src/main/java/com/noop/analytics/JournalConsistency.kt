@@ -19,6 +19,22 @@ object JournalConsistency {
         val todayAnswer: Boolean?,
     )
 
+    // Baselines.isoEpochDay intentionally accepts day 32. Imported Journal keys
+    // must be canonical dates so impossible dates cannot become false evidence.
+    // Keep this calendar gate value-for-value with the Swift twin.
+    private fun canonicalEpochDay(iso: String): Int? {
+        if (iso.length != 10 || iso[4] != '-' || iso[7] != '-' ||
+            iso.indices.any { i -> i != 4 && i != 7 && iso[i] !in '0'..'9' }) return null
+        val year = iso.substring(0, 4).toInt()
+        val month = iso.substring(5, 7).toInt()
+        val day = iso.substring(8, 10).toInt()
+        if (month !in 1..12) return null
+        val leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+        val lengths = intArrayOf(31, if (leap) 29 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+        if (day !in 1..lengths[month - 1]) return null
+        return Baselines.isoEpochDay(iso)
+    }
+
     /**
      * Later duplicate rows win; tomorrow/future rows do not count today.
      * A missing today preserves yesterday's Yes streak, but an explicit No
@@ -30,11 +46,11 @@ object JournalConsistency {
         today: String,
         windowDays: Int = 7,
     ): Summary? {
-        val t = Baselines.isoEpochDay(today) ?: return null
+        val t = canonicalEpochDay(today) ?: return null
         val window = windowDays.coerceIn(1, 90)
         val answers = HashMap<Int, Boolean>()
         for (i in 0 until minOf(dayKeys.size, answeredYes.size)) {
-            val d = Baselines.isoEpochDay(dayKeys[i]) ?: continue
+            val d = canonicalEpochDay(dayKeys[i]) ?: continue
             if (d <= t) answers[d] = answeredYes[i]
         }
 
