@@ -20,6 +20,26 @@ class ContextualTodayScreenTest {
         )
     }
 
+    @Test fun connectedWinsOverStaleScanningFlag() {
+        // A scan can finish before its flag clears; never show a scanning prompt
+        // while the connected-state badge and live data already say connected.
+        assertEquals(
+            ContextualPrompt.REVIEW_DAY,
+            contextualPrompt(activeWorkout = false, connected = true, scanning = true, hasCharge = true),
+        )
+        assertEquals(
+            ContextualPrompt.WAITING_FOR_SCORE,
+            contextualPrompt(activeWorkout = false, connected = true, scanning = true, hasCharge = false),
+        )
+    }
+
+    @Test fun scanningIsOnlyAValidPromptWhenDisconnected() {
+        assertEquals(
+            ContextualPrompt.SCANNING,
+            contextualPrompt(activeWorkout = false, connected = false, scanning = true, hasCharge = true),
+        )
+    }
+
     @Test fun offlineIsDistinctFromMissingRecovery() {
         assertEquals(
             ContextualPrompt.CONNECT_STRAP,

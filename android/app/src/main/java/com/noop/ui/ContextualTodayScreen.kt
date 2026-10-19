@@ -61,7 +61,7 @@ internal fun contextualPrompt(
     hasCharge: Boolean,
 ): ContextualPrompt = when {
     activeWorkout -> ContextualPrompt.ACTIVE_SESSION
-    scanning -> ContextualPrompt.SCANNING
+    scanning && !connected -> ContextualPrompt.SCANNING
     !connected -> ContextualPrompt.CONNECT_STRAP
     !hasCharge -> ContextualPrompt.WAITING_FOR_SCORE
     else -> ContextualPrompt.REVIEW_DAY
