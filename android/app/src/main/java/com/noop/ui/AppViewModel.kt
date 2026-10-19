@@ -2670,8 +2670,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 // Pass the profile height so the importer can derive BMI (Health Connect has no BMI record).
                 // A returned ImportSummary.failure() is NOT a completed sync. Only stamp success;
                 // empty but successful scans remain valid and throttle the normal interval.
-                runCatching { HealthConnectImporter.import(appContext, repository, profileStore.heightCm) }
-                    .getOrNull()?.succeeded == true
+                try {
+                    HealthConnectImporter.import(appContext, repository, profileStore.heightCm).succeeded
+                } catch (cancel: kotlin.coroutines.cancellation.CancellationException) {
+                    // A cancelled foreground sync must remain cancelled, not turn into a failed scan.
+                    throw cancel
+                } catch (_: Exception) {
+                    false
+                }
             }
             if (ran) {
                 val t = System.currentTimeMillis()
