@@ -1,0 +1,82 @@
+# Fork-only QA: never merge into ryanbr/noop. One exact-source debug APK for owner/ADB consent testing.
+name: Bluetooth consent APK (fork QA)
+
+on:
+  push:
+    branches: [qa/android-bluetooth-enable-apk-20261019]
+    paths:
+      - '.github/workflows/bluetooth-consent-owner-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: noop-bluetooth-consent-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    if: github.repository_owner == 'kvnloo'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Assert product source matches reviewed PR #64
+        env:
+          SOURCE_COMMIT: d91850b7bef452346fd374dcc435c6fe09fa0bc8
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$SOURCE_COMMIT"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/bluetooth-consent-owner-apk.yml"
+          echo "Exactly PR #64 product source; only this QA workflow differs."
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/wrapper-validation@v5
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Run Android unit tests and build sideloadable debug APK
+        working-directory: android
+        run: ./gradlew testFullDebugUnitTest assembleFullDebug --no-build-cache --rerun-tasks
+      - name: Verify Android package, signing certificate and SHA-256
+        working-directory: android
+        run: |
+          set -euo pipefail
+          apk="$(find app/build/outputs/apk/full/debug -maxdepth 1 -name '*.apk' -type f | head -1)"
+          test -n "$apk"
+          mkdir -p dist
+          cp "$apk" dist/NOOP-Bluetooth-consent-debug.apk
+          SDKTOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          "$SDKTOOLS/apksigner" verify --print-certs dist/NOOP-Bluetooth-consent-debug.apk > dist/certificate.txt
+          "$SDKTOOLS/aapt" dump badging dist/NOOP-Bluetooth-consent-debug.apk | grep -E '^(package:|sdkVersion:|targetSdkVersion:)' | tee dist/package.txt
+          grep -q "package: name='com.noop.whoop.debug'" dist/package.txt
+          (cd dist && sha256sum NOOP-Bluetooth-consent-debug.apk > SHA256SUMS)
+          printf 'repository=%s\nqa_commit=%s\nproduct_source_commit=%s\nrun=%s\nplatform=Android\nflavor=fullDebug\n' \
+            "$GITHUB_REPOSITORY" "$GITHUB_SHA" "d91850b7bef452346fd374dcc435c6fe09fa0bc8" "$GITHUB_RUN_ID" > dist/build-info.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NOOP-Bluetooth-consent-${{ github.sha }}
+          path: android/dist/*
+          retention-days: 30
+          if-no-files-found: error
+      - name: Publish immutable fork-only owner test APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: android
+        run: |
+          set -euo pipefail
+          tag="noop-bt-consent-${GITHUB_SHA:0:12}"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Already published: $tag"
+            exit 0
+          fi
+          gh release create "$tag" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "NOOP Android Bluetooth consent owner QA ${GITHUB_SHA:0:12}" --prerelease --latest=false \
+            --notes "Fork-only debug APK for the Bluetooth OFF → Android enable-consent → scan acceptance test. The PRODUCT SOURCE matches NOOP fork PR #64 at d91850b7bef452346fd374dcc435c6fe09fa0bc8; this QA commit adds only the workflow. Includes JVM regression tests, package/certificate verification and SHA-256. The com.noop.whoop.debug app has separate data from official NOOP. No physical device testing or upstream review is claimed. Owner/Hermes ADB test checklist: https://github.com/kvnloo/noop/issues/69"
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url,assets
