@@ -130,25 +130,30 @@ final class JournalCatalogStore: ObservableObject {
             // Keep the first user's custom item (including its display/group/type)
             // and canonical question key, not just dedupe the incoming new names.
             let keys = Set(newValue.map { Self.norm($0) }.filter { !$0.isEmpty })
+            // Build a complete snapshot before assigning @Published items:
+            // removeAll + every append on items itself would write an intermediate
+            // catalog to UserDefaults, risking partial state if interrupted.
+            var updated = items
             var retainedCustom = Set<String>()
-            items.removeAll { item in
+            updated.removeAll { item in
                 guard item.custom else { return false }
                 let key = Self.norm(item.canonical)
                 return !keys.contains(key) || !retainedCustom.insert(key).inserted
             }
-            // Built-in/imported keys still block a new custom, and each accepted
-            // new alias extends the seen set before the next candidate.
-            var seen = Set(items.map { Self.norm($0.canonical) })
-            var next = nextSortIndex()
+            // Existing canonical identities win; every accepted alias extends the
+            // seen set so one setter call cannot create duplicate questions.
+            var seen = Set(updated.map { Self.norm($0.canonical) })
+            var next = (updated.map(\.sortIndex).max() ?? -1) + 1
             for q in newValue {
                 let key = Self.norm(q)
                 let t = Self.trimJournalCanonical(q)
                 guard !t.isEmpty, seen.insert(key).inserted else { continue }
-                items.append(JournalCatalogItem(canonical: t, displayName: nil, kind: .bool,
-                                                group: .other, sortIndex: next,
-                                                hidden: false, custom: true))
+                updated.append(JournalCatalogItem(canonical: t, displayName: nil, kind: .bool,
+                                                  group: .other, sortIndex: next,
+                                                  hidden: false, custom: true))
                 next += 1
             }
+            items = updated
         }
     }
 
