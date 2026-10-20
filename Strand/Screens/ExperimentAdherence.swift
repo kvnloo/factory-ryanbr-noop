@@ -25,10 +25,17 @@ enum ExperimentAdherence {
     }
 
     private static func dayNumber(_ key: String) -> Int? {
+        // Numeric parsing accepts signed components such as +1. Reject aliases before
+        // counting Set<String> members, or one civil day can produce >100% adherence.
+        let bytes = Array(key.utf8)
+        guard bytes.count == 10, bytes[4] == 45, bytes[7] == 45,
+              (0..<10).allSatisfy({ i in i == 4 || i == 7 || (48...57).contains(bytes[i]) }) else {
+            return nil
+        }
         let parts = key.split(separator: "-", omittingEmptySubsequences: false)
         guard parts.count == 3, parts[0].count == 4, parts[1].count == 2,
               parts[2].count == 2, let year = Int(parts[0]), let month = Int(parts[1]),
-              let day = Int(parts[2]) else { return nil }
+              let day = Int(parts[2]), year > 0 else { return nil }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         guard let date = calendar.date(from: DateComponents(year: year, month: month, day: day)) else {
