@@ -1,0 +1,45 @@
+name: Journal consistency parity proof (fork QA only)
+
+on:
+  push:
+    branches: [qa/journal-consistency-proof-20261019]
+    paths: ['.github/workflows/journal-consistency-proof.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    if: github.repository_owner == 'kvnloo'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: 1e0cca954916d1f69582f3b0c73d2d31fdffb4f2
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Pin tested source and baseline
+        run: |
+          test "$(git rev-parse HEAD)" = 1e0cca954916d1f69582f3b0c73d2d31fdffb4f2
+          git cat-file -e 8e4b0c16e7640607600fa6bde5424095eba6034e^{commit}
+          git diff --stat 8e4b0c16e7640607600fa6bde5424095eba6034e HEAD
+      - name: Guarded derived refresh (never writes back to GitHub)
+        id: refresh
+        continue-on-error: true
+        run: python3 Tools/parity_ledger.py --refresh-derived --base 8e4b0c16e7640607600fa6bde5424095eba6034e
+      - name: Report exact metadata and policy result
+        if: always()
+        run: |
+          printf '\nREFRESH_OUTCOME=%s\n' '${{ steps.refresh.outcome }}'
+          git diff --check
+          git diff --stat
+          printf '\nTWIN_MAP_START\n'
+          cat Tools/parity_twin_map.json
+          printf '\nTWIN_MAP_END\nBASELINE_START\n'
+          cat Tools/parity_ledger_baseline.json
+          printf '\nBASELINE_END\n'
+      - name: Fail closed when the guarded refresh is rejected
+        if: always()
+        run: test '${{ steps.refresh.outcome }}' = success
