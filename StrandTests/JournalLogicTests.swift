@@ -296,6 +296,43 @@ final class JournalLogicTests: XCTestCase {
     }
 
     @MainActor
+    func testLegacyCustomQuestionTrimmingMatchesKotlinAtUnicodeBoundaries() {
+        // Foundation treats U+0085 as whitespace, Kotlin does not; Kotlin
+        // treats U+001C...U+001F as whitespace, Foundation does not.
+        let onlyWhitespace = "\u{001C}\u{001F}\u{00A0}"
+        let opaque = "\u{0085}Evening wind-down?\u{200B}"
+        XCTAssertEqual(JournalCatalogStore.trimJournalCanonical(onlyWhitespace), "")
+        XCTAssertEqual(JournalCatalogStore.trimJournalCanonical(opaque), opaque)
+        XCTAssertEqual(JournalCatalogStore.trimJournalCanonical(
+            "\u{001C}Small walk?\u{2007}"), "Small walk?")
+
+        let defaults = isolatedDefaults()
+        let store = JournalCatalogStore(defaults: defaults)
+        store.customQuestions = [
+            onlyWhitespace,
+            "\u{001C}Small walk?\u{2007}",
+            opaque,
+            "\u{001F} SMALL walk? \u{00A0}",
+        ]
+        XCTAssertEqual(store.customQuestions, ["Small walk?", opaque])
+        XCTAssertEqual(JournalCatalogStore(defaults: defaults).customQuestions,
+                       ["Small walk?", opaque])
+
+        // Both the initial legacy migration and direct custom addition must
+        // reject semantically empty keys and preserve Kotlin-opaque scalars.
+        let legacy = JournalCatalogStore.migrateLegacy(
+            custom: [onlyWhitespace, "\u{001C}Small walk?\u{2007}", opaque],
+            hidden: ["\u{001F}"])
+        XCTAssertEqual(legacy.filter { $0.custom }.map(\.canonical),
+                       ["Small walk?", opaque])
+        store.addCustom(onlyWhitespace)
+        XCTAssertEqual(store.customQuestions.count, 2)
+        let second = JournalCatalogStore(defaults: isolatedDefaults())
+        second.addCustom(opaque)
+        XCTAssertEqual(second.customQuestions, [opaque])
+    }
+
+    @MainActor
     func testAddCustomNumericItem() {
         let store = makeCatalog()
         store.items = []
