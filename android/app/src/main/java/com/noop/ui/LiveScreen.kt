@@ -226,7 +226,7 @@ fun LiveScreen(viewModel: AppViewModel, onManageDevices: () -> Unit = {}) {
             onDismissRequest = { showHeartMeditation = false },
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
-            HeartMeditationScreen(live = viewModel.live, bpm = bpm, onClose = { showHeartMeditation = false })
+            HeartMeditationScreen(live = viewModel.live, onClose = { showHeartMeditation = false })
         }
     }
 

@@ -81,7 +81,6 @@ private const val KEY_HEART_MEDITATION_GUIDE = "live.heartMeditation.guide"
 @Composable
 fun HeartMeditationScreen(
     live: Flow<LiveState>,
-    bpm: Int?,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -108,6 +107,7 @@ fun HeartMeditationScreen(
     var swing by remember { mutableStateOf<Double?>(null) }
     var focus by remember { mutableStateOf<RhythmFocus?>(null) }
     var wave by remember { mutableStateOf<List<Double>>(emptyList()) }
+    var bpm by remember { mutableStateOf<Int?>(null) }
     var stillLevel by remember { mutableStateOf(HeartMeditationTuning.LEVEL_REST) }
     var frameMs by remember { mutableLongStateOf(sessionStartMs) }
     var inhaling by remember { mutableStateOf(true) }
@@ -118,6 +118,7 @@ fun HeartMeditationScreen(
         focus = session.focus
         wave = session.rhythm.wave.toList()
         pulses = session.pulses
+        bpm = session.cleanBpm
     }
 
     // A meditation is watched, not touched: keep the screen awake while it is open.
@@ -382,7 +383,7 @@ private fun MeditationHalo(
         val now = frameMs()
         if (pacer != null) {
             val r = vesselR * (1.06f + 0.30f * pacer.toFloat())
-            drawCircle(color = guideColor.copy(alpha = 0.06f + 0.10f * pacer.toFloat()), radius = r, center = c)
+            drawCircle(color = guideColor.copy(alpha = 0.02f + 0.05f * pacer.toFloat()), radius = r, center = c)
             drawCircle(
                 color = guideColor.copy(alpha = 0.55f),
                 radius = r,

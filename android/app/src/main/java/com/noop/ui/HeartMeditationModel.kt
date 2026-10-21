@@ -71,7 +71,7 @@ internal object HeartMeditationTuning {
     const val LEVEL_SWING: Double = 0.30
 
     /** The smallest half-swing (bpm) used for scaling, so a flat trace stays calm rather than amplified. */
-    const val MIN_HALF_SWING_BPM: Double = 2.0
+    const val MIN_HALF_SWING_BPM: Double = 3.0
 
     /** Slow baseline EWMA weight per beat (~20-beat memory, about two slow breaths). */
     const val BASELINE_WEIGHT: Double = 0.05
@@ -512,9 +512,24 @@ internal class HeartMeditationSession {
         }
         val rr = playout.poll(nowMs) ?: return false
         rhythm.onBeat(rr, nowMs)
+        if (steadiness == BeatSteadiness.WAITING) {
+            // Not trusted yet: let the tracker warm its baseline, but neither pulse nor move the vessel,
+            // so the picture never disagrees with the "waiting for steady beats" line above it.
+            rhythm.settle(nowMs)
+            return false
+        }
         pulses += 1
         return true
     }
+
+    /** Heart rate from the last few CLEAN beats (bpm), or null while waiting. The view shows this rather
+     *  than the raw live HR so the number and the vessel come from one gated funnel. */
+    val cleanBpm: Int?
+        get() {
+            if (steadiness == BeatSteadiness.WAITING || clean.isEmpty()) return null
+            val recent = clean.toList().takeLast(5)
+            return (60_000.0 / recent.average()).roundToInt()
+        }
 
     fun levelAt(nowMs: Long): Double = rhythm.levelAt(nowMs)
 }
