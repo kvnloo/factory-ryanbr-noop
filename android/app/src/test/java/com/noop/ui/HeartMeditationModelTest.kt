@@ -176,6 +176,22 @@ class HeartMeditationModelTest {
         assertEquals(HeartMeditationTuning.LEVEL_REST, session.levelAt(t + 20_000), 1e-9)
     }
 
+    @Test
+    fun `nothing pulses and the vessel rests until the beats are steady`() {
+        val session = HeartMeditationSession()
+        var t = 0L
+        // Seeded after 3 beats, but WAITING until 8 clean beats are in the window.
+        repeat(7) { session.onPacket(listOf(900), t); session.tick(t + 1); t += 900 }
+        assertEquals(BeatSteadiness.WAITING, session.steadiness)
+        assertEquals(0, session.pulses)
+        assertNull(session.cleanBpm)
+        assertEquals(HeartMeditationTuning.LEVEL_REST, session.levelAt(t + 5_000), 1e-9)
+        repeat(3) { session.onPacket(listOf(900), t); session.tick(t + 1); t += 900 }
+        assertEquals(BeatSteadiness.STEADY, session.steadiness)
+        assertTrue(session.pulses > 0)
+        assertEquals(67, session.cleanBpm)
+    }
+
     // ── Rhythm focus ──────────────────────────────────────────────────────────
 
     @Test
