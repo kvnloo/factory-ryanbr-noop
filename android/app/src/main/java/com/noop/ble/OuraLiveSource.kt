@@ -21,6 +21,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import com.noop.ble.gesture.OuraAcmCodec
+import com.noop.ble.gesture.OuraAcmRecorder
 import com.noop.ble.gesture.OuraTapDetector
 import android.os.ParcelUuid
 import com.noop.data.OuraStreamMapping
@@ -460,7 +461,16 @@ class OuraLiveSource(
 
     // A bounded, user-armed accelerometer session on the EXISTING Oura BLE link.
     // No new scan, pairing takeover, health-data path or always-on sampling.
-    private val tapDetector = OuraTapDetector()
+    private val tapDetector = OuraTapDetector(observer = { onTapPeak(it) })
+    /**
+     * Debug raw-motion recorder for the current capture, or null (the default). Attached only by the
+     * gesture setup screen's opt-in recording mode; see [OuraAcmRecorder].
+     */
+    @Volatile var acmRecorder: OuraAcmRecorder? = null
+    /** The generation this source runs as, for the recorder header. */
+    val ringGenerationName: String get() = ringGen.displayName
+    /** Per-capture cap on peak lines in the strap log; the recorder (when attached) keeps every one. */
+    private var tapPeaksLogged = 0
     private var tapSink: ((OuraTapDetector.Gesture) -> Unit)? = null
     private var tapEpoch = 0L
     private var lastTapSampleMs = -1L
@@ -494,6 +504,7 @@ class OuraLiveSource(
         tapDetector.reset()
         lastTapSampleMs = -1
         acmFramesSeen = 0
+        tapPeaksLogged = 0
         loggedUndecodedAcm = false
         acmFramesDecoded = 0
         acmGestures = 0
@@ -523,6 +534,26 @@ class OuraLiveSource(
             wire.joinToString(" ") { "%02x".format(it.toInt() and 0xff) })
     }
 
+    /**
+     * One detector excursion (main thread, inside a capture). Logged so a missed tap can be explained from
+     * the strap log: its peak deviation against the threshold, the spacing to the previous impulse, and
+     * whether the cooldown swallowed it. Capped per capture; the recorder keeps every peak.
+     */
+    private fun onTapPeak(p: OuraTapDetector.Peak) {
+        acmRecorder?.peak(p)
+        if (tapPeaksLogged >= MAX_TAP_PEAK_LOG_LINES) return
+        tapPeaksLogged++
+        val verdict = when {
+            p.counted -> "impulse ${p.impulsesAfter}"
+            p.blocked -> "in cooldown"
+            p.deviation >= p.thresholdCounts -> "too close to previous impulse"
+            else -> "below threshold"
+        }
+        log("Oura: tap peak dev=${p.deviation.toInt()} (threshold ${p.thresholdCounts.toInt()}) " +
+            "spacing=${if (p.spacingMs < 0) "-" else "${p.spacingMs}ms"} - $verdict" +
+            if (tapPeaksLogged == MAX_TAP_PEAK_LOG_LINES) " (peak log cap reached for this capture)" else "")
+    }
+
     /** OFF is best effort when Bluetooth has disconnected; the ring's timebox still expires. */
     fun stopGestureCapture() {
         handler.removeCallbacks(tapCaptureTimeout)
@@ -548,6 +579,7 @@ class OuraLiveSource(
         if (tapSink == null || ringGen !in GESTURE_CAPTURE_GENS) return
         acmFramesSeen++
         val axes = OuraAcmCodec.decode(wire)
+        acmRecorder?.frame(SystemClock.elapsedRealtime(), wire, axes)
         if (axes.isEmpty()) {
             logFirstUndecodedAcm(wire)
             return
@@ -2719,18 +2751,6 @@ class OuraLiveSource(
 
     companion object {
         /**
-         * Why bounded gesture capture may not arm right now, or null when it may. Pure so the gate is
-         * JVM-tested.
-         *
-         * The driver may be `Streaming` OR `FetchingHistory`. Both mean authenticated and past the live-HR
-         * enable; a history drain is a background pass the ring can take minutes over (and, before the write
-         * queue, could never finish), and gesture capture does not interfere with it: `0x33` ACM frames are
-         * split off by their outer op in [handleNotification] before the `0x11` summary routing and the TLV
-         * reassembler, history event tags are all >= 0x41, and the batch-quiet timer only re-arms on decoded
-         * TLV records. `gesture_acm_on` itself goes through the same write queue, behind any `get_events`
-         * in flight rather than racing it.
-         */
-        /**
          * Generations bounded gesture capture may be armed on. Gen 3 is the generation the `0x06` time-boxed
          * ACM request and `0x33` frame layout were researched on (open_oura, Gen 3 Horizon). Gen 4 is
          * included because the framing, auth and event-tag dictionary are generation-invariant
@@ -2742,6 +2762,21 @@ class OuraLiveSource(
          */
         internal val GESTURE_CAPTURE_GENS = setOf(OuraRingGen.GEN3, OuraRingGen.GEN4)
 
+        /** Strap-log lines per capture for [onTapPeak]. */
+        private const val MAX_TAP_PEAK_LOG_LINES = 80
+
+        /**
+         * Why bounded gesture capture may not arm right now, or null when it may. Pure so the gate is
+         * JVM-tested.
+         *
+         * The driver may be `Streaming` OR `FetchingHistory`. Both mean authenticated and past the live-HR
+         * enable; a history drain is a background pass the ring can take minutes over (and, before the write
+         * queue, could never finish), and gesture capture does not interfere with it: `0x33` ACM frames are
+         * split off by their outer op in [handleNotification] before the `0x11` summary routing and the TLV
+         * reassembler, history event tags are all >= 0x41, and the batch-quiet timer only re-arms on decoded
+         * TLV records. `gesture_acm_on` itself goes through the same write queue, behind any `get_events`
+         * in flight rather than racing it.
+         */
         internal fun gestureCaptureRefusal(
             seconds: Int,
             ringGen: OuraRingGen,

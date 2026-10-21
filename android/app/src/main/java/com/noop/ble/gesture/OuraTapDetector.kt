@@ -15,8 +15,36 @@ class OuraTapDetector(
     private val maxSpacingMs: Long = 430,
     private val quietMs: Long = 500,
     private val cooldownMs: Long = 1_600,
+    /**
+     * Diagnostic only; never changes a decision. Called once per motion excursion whose peak deviation
+     * reached half the threshold, when the excursion ends, so a missed tap can be explained from the log
+     * (too weak, too close to the previous impulse, inside the cooldown, ...).
+     */
+    private val observer: ((Peak) -> Unit)? = null,
 ) {
     enum class Gesture { DOUBLE_TAP, TRIPLE_TAP, QUADRUPLE_TAP }
+
+    /**
+     * One excursion of |magnitude - gravity| above half the threshold.
+     * [counted]: it crossed the threshold and was accepted as an impulse. [spacingMs]: time since the
+     * previous accepted impulse at the crossing (-1 = none open). [impulsesAfter]: the open impulse count
+     * after it. [blocked]: it crossed the threshold inside the post-gesture cooldown.
+     */
+    data class Peak(
+        val atMs: Long,
+        val deviation: Double,
+        val thresholdCounts: Double,
+        val counted: Boolean,
+        val spacingMs: Long,
+        val impulsesAfter: Int,
+        val blocked: Boolean,
+    )
+
+    private var peakDeviation = 0.0
+    private var peakAtMs = -1L
+    private var peakCounted = false
+    private var peakSpacingMs = -1L
+    private var peakBlocked = false
 
     private var gravityMagnitude: Double? = null
     private var elevated = false
@@ -47,22 +75,50 @@ class OuraTapDetector(
             return completed
         }
         val deviation = abs(magnitude - prior)
-        if (deviation < thresholdCounts * 0.45) elevated = false
+        if (observer != null && deviation >= thresholdCounts * 0.5 && deviation > peakDeviation) {
+            peakDeviation = deviation
+            peakAtMs = elapsedMs
+        }
+        if (deviation < thresholdCounts * 0.45) {
+            elevated = false
+            reportPeak()
+        }
         if (deviation >= thresholdCounts && !elevated) {
             elevated = true
+            peakSpacingMs = if (lastImpulseMs < 0) -1L else elapsedMs - lastImpulseMs
             if (elapsedMs >= blockedUntilMs) {
                 if (lastImpulseMs < 0 || elapsedMs - lastImpulseMs > maxSpacingMs) {
                     impulses = 1
                     lastImpulseMs = elapsedMs
+                    peakCounted = true
                 } else if (elapsedMs - lastImpulseMs >= minSpacingMs) {
                     impulses++
                     lastImpulseMs = elapsedMs
+                    peakCounted = true
                 }
+            } else {
+                peakBlocked = true
             }
         }
         // Prevent a tap spike from pulling the estimated gravity vector toward it.
         if (deviation < thresholdCounts) gravityMagnitude = prior + (magnitude - prior) * 0.06
         return completed
+    }
+
+    private fun reportPeak() {
+        val obs = observer
+        if (obs != null && peakAtMs >= 0) {
+            obs(Peak(peakAtMs, peakDeviation, thresholdCounts, peakCounted, peakSpacingMs, impulses, peakBlocked))
+        }
+        clearPeak()
+    }
+
+    private fun clearPeak() {
+        peakDeviation = 0.0
+        peakAtMs = -1L
+        peakCounted = false
+        peakSpacingMs = -1L
+        peakBlocked = false
     }
 
     /** Wait for quiet before deciding double versus triple or quadruple tap. */
@@ -83,6 +139,7 @@ class OuraTapDetector(
 
     /** Reset on disconnect, Bluetooth shutdown, capture expiry, or user disarm. */
     fun reset() {
+        clearPeak()
         gravityMagnitude = null
         elevated = false
         lastSampleMs = -1L

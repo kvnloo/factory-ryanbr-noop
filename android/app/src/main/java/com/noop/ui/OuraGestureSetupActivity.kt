@@ -25,6 +25,9 @@ import android.view.WindowManager
 import com.noop.ble.gesture.OuraGestureBroker
 import java.util.concurrent.Executors
 import com.noop.ble.gesture.OuraTapDetector
+import com.noop.ble.gesture.OuraAcmRecorder
+import android.view.KeyEvent
+import java.io.File
 import com.noop.NoopApplication
 import com.noop.R
 import com.noop.ble.OuraZ0LiveHandoff
@@ -51,9 +54,35 @@ class OuraGestureSetupActivity : Activity() {
     private var sequence = 0L
     private var capability: PendingIntent? = null
     private val handler = Handler(Looper.getMainLooper())
+    private lateinit var countdown: TextView
+    private lateinit var recordToggle: Button
+    private lateinit var labelButton: Button
+    private lateinit var markButton: Button
+    private lateinit var rearmToggle: Button
+    private var armedUntilMs = 0L
+    /** Re-arm the next bounded capture when one expires, ONLY while this screen is in front. */
+    private var autoRearm = true
+    /** Debug raw-motion recording (default OFF, never persisted): no broker lease, no gesture delivery. */
+    private var recordMode = false
+    private var recordLabel = 0
+    private var recorder: OuraAcmRecorder? = null
+    private var recordFile: File? = null
     private val endNotice = Runnable {
+        val rearm = autoRearm && visible && !recordMode && armed
+        val recording = recorder != null
         disarm()
-        status.text = getString(R.string.oura_broker_expired)
+        if (rearm) begin(rearm = true) else if (!recording) status.text = getString(R.string.oura_broker_expired)
+    }
+    private val tick = object : Runnable {
+        override fun run() {
+            if (!armed) { countdown.text = "Ring motion: OFF"; return }
+            val left = ((armedUntilMs - SystemClock.elapsedRealtime()) / 1000).coerceAtLeast(0)
+            val rec = recorder
+            countdown.text = "Ring motion armed: ${left}s left" +
+                (if (autoRearm && !recordMode) " (re-arms while this screen is open)" else "") +
+                (if (rec != null) "\nRecording '${RECORD_LABELS[recordLabel]}': ${rec.frames} frames, ${rec.marks} marks" else "")
+            handler.postDelayed(this, 1_000)
+        }
     }
 
     override fun onCreate(state: Bundle?) {
@@ -103,8 +132,27 @@ class OuraGestureSetupActivity : Activity() {
             if (capability == null) "z0live voice not armed: ring taps can only open visible controls."
             else "Session gesture capability received; starts only after you arm the ring.", 16f)
         progress = label("Recognized double taps: 0 / 3", 18f)
+        countdown = label("Ring motion: OFF", 16f)
         arm = button("Arm ring for 2 minutes") { begin() }
         stop = button("Stop and turn gestures off") { disarm() }.apply { isEnabled = false }
+        rearmToggle = button("Auto re-arm while this screen is open: ON") {
+            autoRearm = !autoRearm
+            rearmToggle.text = "Auto re-arm while this screen is open: ${if (autoRearm) "ON" else "OFF"}"
+        }
+        label("Debug: raw motion recording (for tuning tap detection). Off by default; files stay on " +
+            "this phone. While recording, taps are NOT sent to z0live.", 14f)
+        recordToggle = button("Debug recording: OFF") {
+            if (armed || claiming) return@button
+            recordMode = !recordMode
+            recordToggle.text = "Debug recording: ${if (recordMode) "ON" else "OFF"}"
+            labelButton.isEnabled = recordMode
+        }
+        labelButton = button("Recording label: ${RECORD_LABELS[0]}") {
+            if (armed) return@button
+            recordLabel = (recordLabel + 1) % RECORD_LABELS.size
+            labelButton.text = "Recording label: ${RECORD_LABELS[recordLabel]}"
+        }.apply { isEnabled = false }
+        markButton = button("Mark tap (or press volume down)") { markTap() }.apply { isEnabled = false }
         button("Open NOOP devices / connect ring") {
             disarm()
             startActivity(Intent(this, MainActivity::class.java))
@@ -151,7 +199,20 @@ class OuraGestureSetupActivity : Activity() {
     private fun dp(n: Int): Int = (n * resources.displayMetrics.density + 0.5f).toInt()
     private val coordinator get() = (application as NoopApplication).sourceCoordinator
 
-    private fun begin(leaseReady: Boolean = false) {
+    private fun markTap() {
+        val rec = recorder ?: return
+        rec.mark(SystemClock.elapsedRealtime(), RECORD_LABELS[recordLabel])
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN && recorder != null) {
+            if (event?.repeatCount == 0) markTap()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    private fun begin(leaseReady: Boolean = false, rearm: Boolean = false) {
         // Never start a local-only gesture capture while the optional broker
         // credentials are still being replaced on the export worker.
         if (armed || claiming || pairingInProgress) return
@@ -163,7 +224,7 @@ class OuraGestureSetupActivity : Activity() {
                 Manifest.permission.BLUETOOTH_SCAN), BLUETOOTH_REQUEST)
             return
         }
-        if (broker.configured && !leaseReady) {
+        if (broker.configured && !leaseReady && !recordMode) {
             claiming = true
             stop.isEnabled = true
             val generation = ++claimGeneration
@@ -173,16 +234,41 @@ class OuraGestureSetupActivity : Activity() {
                     claiming = false
                     if (generation != claimGeneration || isDestroyed) {
                         if (!export.isShutdown) export.execute { runCatching { broker.release() } }
-                    } else if (ok) begin(true)
+                    } else if (ok) begin(true, rearm)
                     else status.text = getString(R.string.oura_broker_failed)
                 }
             }
             return
         }
-        doubles = 0
-        sequence = 0
-        progress.text = "Recognized double taps: 0 / 3"
+        if (!rearm) {
+            // An automatic re-arm keeps the calibration: three trials once per screen visit, not per window.
+            doubles = 0
+            sequence = 0
+            progress.text = "Recognized double taps: 0 / 3"
+        }
+        if (recordMode) {
+            val generation = coordinator.setActiveOuraAcmRecorder(null)
+            val opened = if (generation == null) null else runCatching {
+                OuraAcmRecorder.open(filesDir, RECORD_LABELS[recordLabel], generation, System.currentTimeMillis())
+            }.getOrNull()
+            if (opened == null || coordinator.setActiveOuraAcmRecorder(opened.first) == null) {
+                opened?.first?.close()
+                opened?.second?.delete()
+                status.text = "Could not start a recording: no live Oura ring."
+                return
+            }
+            recorder = opened.first
+            recordFile = opened.second
+        }
         val ok = coordinator.startActiveOuraGestureCapture(120) { gesture ->
+            val rec = recorder
+            if (rec != null) {
+                // Recording only: count what the current detector says, deliver nothing.
+                rec.gesture(SystemClock.elapsedRealtime(), gesture.name)
+                if (gesture == OuraTapDetector.Gesture.DOUBLE_TAP) doubles++
+                progress.text = "Detector double taps this recording: $doubles"
+                return@startActiveOuraGestureCapture
+            }
             if (gesture == OuraTapDetector.Gesture.DOUBLE_TAP) {
                 doubles++
                 progress.text = "Recognized double taps: ${minOf(doubles, 3)} / 3"
@@ -197,6 +283,7 @@ class OuraGestureSetupActivity : Activity() {
             }
         }
         if (!ok) {
+            closeRecording(keep = false)
             export.execute { runCatching { broker.release() } }
             status.text = "NOOP needs an authenticated, actively connected Gen 3 ring. " +
                 "Open NOOP → Devices, select Oura Ring 3 and reconnect, then retry."
@@ -205,9 +292,32 @@ class OuraGestureSetupActivity : Activity() {
         armed = true
         arm.isEnabled = false
         stop.isEnabled = true
-        status.text = "Oura motion enabled for 120 seconds. Double tap the ring 3 times."
+        markButton.isEnabled = recorder != null
+        status.text = when {
+            recorder != null -> "Recording '${RECORD_LABELS[recordLabel]}' for 120 seconds. After each double tap, press volume down."
+            doubles >= 3 -> "Oura motion re-armed for 120 seconds. Double tap toggles z0live."
+            else -> "Oura motion enabled for 120 seconds. Double tap the ring 3 times."
+        }
+        armedUntilMs = SystemClock.elapsedRealtime() + 120_000
+        handler.removeCallbacks(tick)
+        handler.post(tick)
         handler.removeCallbacks(endNotice)
         handler.postDelayed(endNotice, 120_000)
+    }
+
+    /** Detach and close the debug recorder; report where it went (or delete it when nothing was armed). */
+    private fun closeRecording(keep: Boolean) {
+        val rec = recorder ?: return
+        recorder = null
+        coordinator.setActiveOuraAcmRecorder(null)
+        rec.close()
+        val file = recordFile
+        recordFile = null
+        if (::markButton.isInitialized) markButton.isEnabled = false
+        if (!keep) { file?.delete(); return }
+        if (::status.isInitialized) {
+            status.text = "Saved ${rec.frames} frames (${rec.undecoded} undecoded), ${rec.marks} marks to ${file?.name}."
+        }
     }
 
     private fun deliverGesture(gesture: String) {
@@ -282,6 +392,7 @@ class OuraGestureSetupActivity : Activity() {
         if (::arm.isInitialized) arm.isEnabled = true
         if (::stop.isInitialized) stop.isEnabled = false
         if (::status.isInitialized) status.text = "Gesture capture OFF."
+        closeRecording(keep = true)   // after the status line, so the saved-file line is what stays
     }
 
     override fun onResume() { super.onResume(); visible = true }
@@ -300,5 +411,7 @@ class OuraGestureSetupActivity : Activity() {
         const val EXTRA_TIMESTAMP = "app.lawnchair.zer0.voice.z0live.OURA_TIMESTAMP"
         const val LAWNCHAIR_PACKAGE = "app.lawnchair.play.debug"
         const val BLUETOOTH_REQUEST = 714
+        /** Ground-truth labels for one debug recording (one capture = one label). */
+        val RECORD_LABELS = listOf("normal", "light", "negative", "use")
     }
 }

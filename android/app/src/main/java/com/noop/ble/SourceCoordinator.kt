@@ -635,6 +635,14 @@ class SourceCoordinator(
         (activeSource as? OuraLiveSource)?.stopGestureCapture()
     }
 
+    /** Attach (or detach with null) the opt-in debug motion recorder on the live Oura source. Returns the
+     *  ring generation's display name when a live Oura source took it, else null. */
+    fun setActiveOuraAcmRecorder(recorder: com.noop.ble.gesture.OuraAcmRecorder?): String? {
+        val source = activeSource as? OuraLiveSource ?: return null
+        source.acmRecorder = recorder
+        return source.ringGenerationName
+    }
+
 
 
     /**
