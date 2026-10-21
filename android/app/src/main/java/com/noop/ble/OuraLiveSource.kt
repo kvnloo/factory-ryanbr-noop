@@ -479,9 +479,7 @@ class OuraLiveSource(
         lastTapSampleMs = -1
         tapSink = onGesture
         tapCaptureUntilMs = SystemClock.elapsedRealtime() + seconds * 1000L
-        lastWriteAccepted = false
-        write(OuraCommand("gesture_acm_on", OuraAcmCodec.enableForSeconds(seconds)))
-        if (lastWriteAccepted != true) {
+        if (!write(OuraCommand("gesture_acm_on", OuraAcmCodec.enableForSeconds(seconds)))) {
             tapSink = null
             tapCaptureUntilMs = 0
             tapEpoch++
@@ -560,6 +558,12 @@ class OuraLiveSource(
      * of ours to resolve.
      */
     private var lastWriteAccepted: Boolean? = null
+
+    /** Outbound writes, one in flight at a time ([OuraWriteQueue]). Guarded by synchronizing on itself:
+     *  writes are issued from the main looper and from GATT binder callbacks. */
+    private val writeQueue = OuraWriteQueue<OuraCommand>()
+    /** The busy-retry / completion-deadline kick for [pumpWrites]; named so link teardown can cancel it. */
+    private val writePumpRunnable = Runnable { pumpWrites() }
     /** The nonce timer. One-shot; re-posted by [authWatchdogRunnable] after an escalation. */
     private val authWatchdogRunnable = Runnable { authWatchdogFired() }
 
@@ -1317,6 +1321,7 @@ class OuraLiveSource(
         driver = OuraDriver(ringGen = ringGen, authKey = authKey(), allowTierB = true,
                             allowKeyInstall = adoptIntent, notificationMask = notificationMask)
         reassembler.reset()
+        resetWriteQueue()              // writes queued for the previous link never reach this one
         pendingInstallKey = null       // a new connection starts with no install in flight
         _adoptPhase.value = AdoptPhase.Idle   // a stale outcome must never drive the wizard's transition
         resetWear()   // #628: fresh session — clear any stale worn/charging badge
@@ -1429,6 +1434,7 @@ class OuraLiveSource(
         gatt = null
         writeChar = null
         notifyChar = null
+        resetWriteQueue()
         reassembler.reset()
         loggedFirstHr = false      // a later reconnect should log its first sample again
         loggedFirstTemp = false
@@ -1584,6 +1590,7 @@ class OuraLiveSource(
                     drainPendingAnchorEvents()
                     dropUnanchoredHypnogramBursts()
                     commitInterruptedDrainCursor()   // #2443: bank progress before the anchor goes
+                    resetWriteQueue()
                     reassembler.reset()
                     loggedFirstTemp = false
                     loggedFirstSpo2.clear()
@@ -1683,6 +1690,20 @@ class OuraLiveSource(
                 log("Oura: WARNING CCCD write FAILED (status=$status) - ring will send no data")
                 announceNeedsPairing(KEY_INSTALL_MESSAGE)
             }
+        }
+
+        override fun onCharacteristicWrite(
+            g: BluetoothGatt,
+            ch: BluetoothGattCharacteristic,
+            status: Int,
+        ) = guardedCallback("characteristic-write") {
+            if (ch.uuid != WRITE_UUID || g !== gatt) return@guardedCallback
+            val done = synchronized(writeQueue) { writeQueue.onWriteCompleted() }
+            if (done != null && status != BluetoothGatt.GATT_SUCCESS) {
+                // A GATT-layer status from the write completion, named as such (not a BluetoothStatusCodes value).
+                log("Oura: WARNING ${done.label} write completed with GATT status $status")
+            }
+            pumpWrites()
         }
 
         override fun onCharacteristicChanged(
@@ -1886,24 +1907,74 @@ class OuraLiveSource(
         write(OuraCommands.liveHRUnsubscribe())
     }
 
-    /** Write one built command to the ring's write characteristic (Write Without Response). Logged by its
-     *  short label only (never bytes or an address). */
-    private fun write(cmd: OuraCommand) = guardedCallback("write") {
-        val g = gatt ?: return@guardedCallback
-        val ch = writeChar ?: return@guardedCallback
+    /**
+     * Queue one built command for the ring's write characteristic (Write Without Response) and send it as
+     * soon as the previous write has completed ([OuraWriteQueue] explains why a burst cannot go out back to
+     * back on Android). Logged by its short label only (never bytes or an address). Returns false when there
+     * is no link to write to or the stack refused the command outright; true when it was sent or is queued.
+     */
+    private fun write(cmd: OuraCommand): Boolean {
+        var accepted = false
+        guardedCallback("write") {
+            if (gatt == null || writeChar == null) return@guardedCallback
+            log("Oura: → ${cmd.label}")
+            synchronized(writeQueue) { writeQueue.enqueue(cmd) }
+            accepted = pumpWrites().none { it === cmd }
+        }
+        return accepted
+    }
+
+    /** Send the next queued write if none is in flight. Returns the commands given up on during this pump. */
+    private fun pumpWrites(): List<OuraCommand> {
+        val g = gatt
+        val ch = writeChar
+        if (g == null || ch == null) {
+            synchronized(writeQueue) { writeQueue.clear() }
+            handler.removeCallbacks(writePumpRunnable)
+            return emptyList()
+        }
+        val r = synchronized(writeQueue) {
+            writeQueue.pump(SystemClock.elapsedRealtime()) { cmd -> sendNow(g, ch, cmd) }
+        }
+        r.completionTimedOut?.let {
+            log("Oura: no write completion for ${it.label} within ${OuraWriteQueue.COMPLETION_TIMEOUT_MS} ms - sending the next write")
+        }
+        for (d in r.dropped) log("Oura: WARNING ${d.item.label} was not sent - ${d.detail}")
+        handler.removeCallbacks(writePumpRunnable)
+        r.nextPumpDelayMs?.let { handler.postDelayed(writePumpRunnable, it) }
+        return r.dropped.map { it.item }
+    }
+
+    private fun sendNow(g: BluetoothGatt, ch: BluetoothGattCharacteristic, cmd: OuraCommand): OuraWriteQueue.Attempt {
         val bytes = ByteArray(cmd.bytes.size) { cmd.bytes[it].toByte() }
-        log("Oura: → ${cmd.label}")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val rc = g.writeCharacteristic(ch, bytes, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
             lastWriteAccepted = rc == android.bluetooth.BluetoothStatusCodes.SUCCESS
+            when (rc) {
+                android.bluetooth.BluetoothStatusCodes.SUCCESS ->
+                    OuraWriteQueue.Attempt(OuraWriteQueue.SendResult.ACCEPTED, "writeCharacteristic rc=$rc")
+                android.bluetooth.BluetoothStatusCodes.ERROR_GATT_WRITE_REQUEST_BUSY ->
+                    OuraWriteQueue.Attempt(OuraWriteQueue.SendResult.BUSY, "writeCharacteristic rc=$rc (write request busy)")
+                else -> OuraWriteQueue.Attempt(OuraWriteQueue.SendResult.FAILED, "writeCharacteristic rc=$rc")
+            }
         } else {
             @Suppress("DEPRECATION")
-            run {
+            val ok = run {
                 ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
                 ch.value = bytes
-                lastWriteAccepted = g.writeCharacteristic(ch)
+                g.writeCharacteristic(ch)
             }
+            lastWriteAccepted = ok
+            // The legacy call folds "busy" into false, so treat false as busy: the retry is bounded.
+            if (ok) OuraWriteQueue.Attempt(OuraWriteQueue.SendResult.ACCEPTED, "writeCharacteristic returned true")
+            else OuraWriteQueue.Attempt(OuraWriteQueue.SendResult.BUSY, "writeCharacteristic returned false")
         }
+    }
+
+    /** Forget queued writes at a link boundary; they belong to a connection that is gone. */
+    private fun resetWriteQueue() {
+        synchronized(writeQueue) { writeQueue.clear() }
+        handler.removeCallbacks(writePumpRunnable)
     }
 
     /**
