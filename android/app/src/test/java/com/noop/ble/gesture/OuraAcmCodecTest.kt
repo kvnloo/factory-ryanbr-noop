@@ -12,50 +12,34 @@ class OuraAcmCodecTest {
     @Test fun signedLittleEndianAxesAndTwoSamples() {
         assertEquals(
             listOf(OuraAcmCodec.Axes(-2, 2, -3), OuraAcmCodec.Axes(4, 5, 6)),
-            OuraAcmCodec.decode(fromHex("330c3201feff0200fdff040005000600")),
+            OuraAcmCodec.decode(fromHex("330e3201feff0200fdff040005000600")),
         )
     }
 
     @Test fun acceptsSingleSample() {
         assertEquals(
             listOf(OuraAcmCodec.Axes(1, 2, 3)),
-            OuraAcmCodec.decode(fromHex("33063200010002000300")),
+            OuraAcmCodec.decode(fromHex("33083200010002000300")),
         )
     }
 
     @Test fun rejectsUnknownTagRateSizeAndLength() {
-        val valid = fromHex("330c3201feff0200fdff040005000600")
+        val valid = fromHex("330e3201feff0200fdff040005000600")
         assertTrue(OuraAcmCodec.decode(byteArrayOf()).isEmpty())
         assertTrue(OuraAcmCodec.decode(valid.copyOf(8)).isEmpty())
         assertTrue(OuraAcmCodec.decode(valid.copyOf(10)).isEmpty())
         assertTrue(OuraAcmCodec.decode(valid.copyOf().apply { set(0, 0x44) }).isEmpty())
-        assertTrue(OuraAcmCodec.decode(valid.copyOf().apply { set(1, 0x08) }).isEmpty())
+        assertTrue(OuraAcmCodec.decode(valid.copyOf().apply { set(1, 0x0c) }).isEmpty())
         assertTrue(OuraAcmCodec.decode(valid.copyOf().apply { set(2, 0x10) }).isEmpty())
     }
 
-    @Test fun splitsWholeAcmFramesByTheirOwnLengthRule() {
-        // Two-sample frame: length byte 0x0c counts the xyz payload only, so the frame is 16 bytes, not
-        // the 14 an outer-frame parse (2 + len) would cut, which decode then rejected every time.
-        val two = fromHex("330c3201feff0200fdff040005000600")
-        val (frames, end) = OuraAcmCodec.splitLeadingFrames(two)
-        assertEquals(1, frames.size)
-        assertEquals(16, end)
-        assertEquals(listOf(OuraAcmCodec.Axes(-2, 2, -3), OuraAcmCodec.Axes(4, 5, 6)), OuraAcmCodec.decode(frames[0]))
-    }
-
-    @Test fun splitsPackedFramesAndStopsAtNonAcmBytes() {
-        val packed = fromHex("33063200010002000300" + "330c3201feff0200fdff040005000600" + "0d0164")
-        val (frames, end) = OuraAcmCodec.splitLeadingFrames(packed)
-        assertEquals(listOf(10, 16), frames.map { it.size })
-        assertEquals(26, end)                       // the trailing 0x0d frame is left for the outer parser
-        assertEquals(1, OuraAcmCodec.decode(frames[0]).size)
-    }
-
-    @Test fun leavesNonAcmAndOddShapesAlone() {
-        assertEquals(0, OuraAcmCodec.splitLeadingFrames(fromHex("0d0164")).second)
-        assertEquals(0, OuraAcmCodec.splitLeadingFrames(fromHex("33083200010002000300aabb")).second) // len 8
-        assertEquals(0, OuraAcmCodec.splitLeadingFrames(fromHex("330c3201feff0200")).second)         // truncated
-        assertEquals(0, OuraAcmCodec.splitLeadingFrames(byteArrayOf()).second)
+    @Test fun decodesAFrameCapturedFromARealRing() {
+        // First 0x33 frame of a bounded capture on an Oura ring reporting hardware id BLB_04B (Galaxy S25
+        // Ultra, 2026-10-20). Length byte 0x0e = the 14 bytes after it. Sample 1 has magnitude ~0.98 g.
+        assertEquals(
+            listOf(OuraAcmCodec.Axes(606, 665, 396), OuraAcmCodec.Axes(254, 148, -801)),
+            OuraAcmCodec.decode(fromHex("330e324e5e0299028c01fe009400dffc")),
+        )
     }
 
     @Test fun boundedEnableAndOffPackets() {

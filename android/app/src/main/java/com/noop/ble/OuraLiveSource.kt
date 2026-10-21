@@ -2027,12 +2027,7 @@ class OuraLiveSource(
      */
     private fun handleNotification(data: ByteArray) = guardedCallback("notification") {
         val d = driver ?: return@guardedCallback
-        // Realtime ACM frames first, by their own length rule ([OuraAcmCodec.splitLeadingFrames]); the
-        // outer-frame parser below would cut two bytes off each one and hand the tail to the reassembler.
-        val (acmFrames, acmEnd) = OuraAcmCodec.splitLeadingFrames(data)
-        for (f in acmFrames) onGestureAcm(f)
-        if (acmEnd >= data.size) return@guardedCallback
-        val bytes = IntArray(data.size - acmEnd) { data[acmEnd + it].toInt() and 0xFF }
+        val bytes = IntArray(data.size) { data[it].toInt() and 0xFF }
         // Split any packed outer frames; route 0x2F secure sub-frames through the driver's secure handler
         // and feed all other bytes to the TLV reassembler.
         val nonSecure = ArrayList<Int>()
@@ -2072,8 +2067,7 @@ class OuraLiveSource(
                 }
             }
             if (frame.op == 0x33) {
-                // A 0x33 frame the ACM splitter did not recognise (unexpected length byte): count it and
-                // keep its raw bytes as evidence; never feed it to the health-event reassembler.
+                // Realtime ACM, not a banked health event: rebuild the wire frame for the codec.
                 val wire = ByteArray(frame.body.size + 2)
                 wire[0] = 0x33
                 wire[1] = frame.body.size.toByte()
