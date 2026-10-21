@@ -17,6 +17,9 @@ import java.io.Writer
  *   `g,<ms>,<gesture>` what the current detector emitted
  *   `b,<ms>,<peak>,<quiet level>,<impacts>,<first spacing ms or -1>,<duration ms>,<verdict>,<gesture or ->`
  *      one detector burst ([OuraTapDetector.Burst]); `<ms>` is the detector's sample clock
+ *   `k,<ms>,<start|end|abort>,<block index>,<block id>,<kind>,<taps>,<intensity>,<reps>,<period ms>,<duration ms>`
+ *      a guided-recording block boundary ([OuraGuidedPlan]); `start` is when the first cue fires
+ *   `c,<ms>,<block index>,<rep>` the cue (beep) for one requested repetition inside a TAPS block
  * (v1 files carried `p,...` rows from the earlier gravity-magnitude detector instead of `b,...`.)
  *
  * Thread-safe: frames arrive on the GATT binder thread, marks on main.
@@ -64,6 +67,20 @@ class OuraAcmRecorder(private val out: Writer, label: String, generation: String
         if (closed) return
         out.write("b,${b.atMs},${b.peak},${b.quietLevel},${b.impacts},${b.firstSpacingMs},${b.durationMs}," +
             "${b.verdict.name},${b.gesture?.name ?: "-"}\n")
+    }
+
+    @Synchronized
+    fun block(elapsedMs: Long, event: String, index: Int, b: OuraGuidedPlan.Block) {
+        if (closed) return
+        out.write("k,$elapsedMs,${clean(event)},$index,${clean(b.id)},${b.kind.name},${b.taps},${clean(b.intensity)}," +
+            "${b.reps},${b.periodMs},${b.durationMs}\n")
+    }
+
+    @Synchronized
+    fun cue(elapsedMs: Long, index: Int, rep: Int) {
+        if (closed) return
+        marks++
+        out.write("c,$elapsedMs,$index,$rep\n")
     }
 
     @Synchronized

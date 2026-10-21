@@ -628,8 +628,12 @@ class SourceCoordinator(
 
     fun startActiveOuraGestureCapture(
         seconds: Int,
+        continuous: Boolean = false,
         onGesture: (com.noop.ble.gesture.OuraTapDetector.Gesture) -> Unit,
-    ): Boolean = (activeSource as? OuraLiveSource)?.startGestureCapture(seconds, onGesture) ?: false
+    ): Boolean = (activeSource as? OuraLiveSource)?.startGestureCapture(seconds, continuous, onGesture) ?: false
+
+    /** Whether the live Oura source has a gesture capture armed (false with no Oura source). Main thread. */
+    fun activeOuraGestureCaptureArmed(): Boolean = (activeSource as? OuraLiveSource)?.gestureCaptureArmed ?: false
 
     fun stopActiveOuraGestureCapture() {
         (activeSource as? OuraLiveSource)?.stopGestureCapture()
