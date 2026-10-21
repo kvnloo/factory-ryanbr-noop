@@ -54,7 +54,7 @@ class OuraAcmRecorderTest {
         tap(120)                    // peak jerk 216: a burst, but below minPeak
         quiet(20)
         tap(500)                    // one impact
-        quiet(20)
+        quiet(30)                   // longer than the 25-sample stillness window, so the hand reads still
         tap(500); quiet(4); tap(500) // two impacts 200 ms apart
         quiet(20)
         assertEquals(3, bursts.size)

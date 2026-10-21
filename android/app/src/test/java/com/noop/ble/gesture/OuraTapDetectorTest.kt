@@ -105,6 +105,28 @@ class OuraTapDetectorTest {
         assertEquals(none, apart.gestures)
     }
 
+    @Test fun aDoubleTapWhileTheRingSwaysIsRejectedAsMoving() {
+        // Arm swing / handling: |a| swings by ~±200 counts at 1 Hz, gently enough (≤ ~40 counts per
+        // sample) to keep the jerk under the quiet level, so the burst still opens after a quiet lead-in.
+        val bursts = ArrayList<OuraTapDetector.Burst>()
+        val d = OuraTapDetector(observer = { bursts.add(it) })
+        val gestures = ArrayList<OuraTapDetector.Gesture>()
+        val ring = HashMap<Int, Int>()
+        for (start in listOf(60, 70)) for ((k, p) in SHAPE.withIndex()) ring.merge(start + k, 700 * p / 100, Int::plus)
+        for (i in 0 until 120) {
+            val sway = (300 * kotlin.math.sin(2 * Math.PI * i / 50.0)).toInt()
+            d.sample(i * 20L, -680 + sway + (ring[i] ?: 0), -480, -460)?.let { gestures.add(it) }
+        }
+        assertEquals(none, gestures)
+        val b = bursts.single()
+        assertEquals(OuraTapDetector.Verdict.MOVING, b.verdict)
+        assertTrue("stillness ${b.stillness}", b.stillness > 60)
+        // The same double from a still hand is a gesture, with a near-zero stillness value.
+        val still = double(700, 10)
+        assertEquals(listOf(OuraTapDetector.Gesture.DOUBLE_TAP), still.gestures)
+        assertTrue(still.bursts.single().stillness < 20)
+    }
+
     @Test fun aDoubleTooWeakToStandOutIsReportedButNotCounted() {
         val f = double(amp = 80, spacingSamples = 10)   // peak jerk ≈ 220: above the quiet level, below minPeak
         assertEquals(none, f.gestures)

@@ -81,6 +81,7 @@ class OuraGestureSetupActivity : Activity() {
     private lateinit var guidedButton: Button
     private lateinit var guidedPause: Button
     private lateinit var guidedRestart: Button
+    private lateinit var guidedSkip: Button
     private lateinit var guidedText: TextView
     /** Guided recording: the block running (or next to run) and whether a session is open. */
     private var guidedOpen = false
@@ -162,9 +163,7 @@ class OuraGestureSetupActivity : Activity() {
             "Stop anytime. Gesture settings are OFF by default and this never records microphone audio.",
             15f
         )
-        status = label(
-            if (capability == null) "z0live voice not armed: ring taps can only open visible controls."
-            else "Session gesture capability received; starts only after you arm the ring.", 16f)
+        status = label(routeLine(), 16f)
         progress = label("Recognized double taps: 0 / 3", 18f)
         countdown = label("Ring motion: OFF", 16f)
         arm = button("Arm ring for 2 minutes") { begin() }
@@ -192,6 +191,7 @@ class OuraGestureSetupActivity : Activity() {
         guidedText = label("", 16f)
         guidedButton = button(getString(R.string.oura_guided_start)) { startGuided() }
         guidedPause = button(getString(R.string.oura_guided_pause)) { pauseGuided(close = true) }.apply { isEnabled = false }
+        guidedSkip = button(getString(R.string.oura_guided_skip)) { skipGuided() }
         guidedRestart = button(getString(R.string.oura_guided_restart)) {
             if (guidedOpen) return@button
             guidedPrefs.edit().putInt(KEY_GUIDED_NEXT, 0).apply()
@@ -240,6 +240,17 @@ class OuraGestureSetupActivity : Activity() {
         setContentView(scroll)
         refreshStandby()
         refreshGuided()
+    }
+
+    /**
+     * Where ring taps go from this phone. The old "not armed" line only described the session capability
+     * a z0live screen can hand over; with the broker paired, taps travel through it instead (Always listen,
+     * or this screen's arm), and the broker starts a call itself when no z0live surface is awake.
+     */
+    private fun routeLine(): String = when {
+        capability != null -> "Session gesture capability received; starts only after you arm the ring."
+        broker.configured -> getString(R.string.oura_route_broker)
+        else -> getString(R.string.oura_route_unpaired)
     }
 
     private fun dp(n: Int): Int = (n * resources.displayMetrics.density + 0.5f).toInt()
@@ -504,9 +515,43 @@ class OuraGestureSetupActivity : Activity() {
 
     // MARK: - Guided recording
 
+    /**
+     * Where the guided plan resumes. A position saved by the old 29-block plan is mapped once onto the
+     * short plan (its first two blocks are the same), so finished double/triple-normal blocks are not
+     * repeated.
+     */
+    private fun guidedNext(): Int {
+        if (!guidedPrefs.contains(KEY_GUIDED_NEXT) && guidedPrefs.contains(KEY_GUIDED_NEXT_LEGACY)) {
+            val mapped = OuraGuidedPlan.resumeFromLegacy(guidedPrefs.getInt(KEY_GUIDED_NEXT_LEGACY, 0))
+            guidedPrefs.edit().putInt(KEY_GUIDED_NEXT, mapped).remove(KEY_GUIDED_NEXT_LEGACY).apply()
+        }
+        return guidedPrefs.getInt(KEY_GUIDED_NEXT, 0).coerceIn(0, OuraGuidedPlan.BLOCKS.size)
+    }
+
+    /** Skip: while running, drop the current block (`skip` row) and go on; otherwise move the start on. */
+    private fun skipGuided() {
+        if (guidedOpen) {
+            handler.removeCallbacksAndMessages(guidedToken)
+            tts?.stop()
+            val index = guidedIndex
+            if (guidedRunning) {
+                recorder?.block(SystemClock.elapsedRealtime(), "skip", index, OuraGuidedPlan.BLOCKS[index])
+            }
+            guidedRunning = false
+            guidedPrefs.edit().putInt(KEY_GUIDED_NEXT, index + 1).apply()
+            beep(80)
+            handler.postAtTime({ runBlock(index + 1) }, guidedToken, SystemClock.uptimeMillis() + 600)
+        } else {
+            val next = guidedNext()
+            guidedPrefs.edit().putInt(KEY_GUIDED_NEXT,
+                if (next + 1 >= OuraGuidedPlan.BLOCKS.size) 0 else next + 1).apply()
+            refreshGuided()
+        }
+    }
+
     private fun refreshGuided() {
         if (!::guidedButton.isInitialized) return
-        val next = guidedPrefs.getInt(KEY_GUIDED_NEXT, 0).coerceIn(0, OuraGuidedPlan.BLOCKS.size)
+        val next = guidedNext()
         if (!guidedOpen) guidedIndex = next
         guidedButton.text = when {
             next == 0 || next >= OuraGuidedPlan.BLOCKS.size -> getString(R.string.oura_guided_start)
@@ -515,17 +560,19 @@ class OuraGestureSetupActivity : Activity() {
         guidedButton.isEnabled = !guidedOpen
         guidedPause.isEnabled = guidedOpen
         guidedRestart.isEnabled = !guidedOpen && next > 0
+        guidedSkip.isEnabled = true
         if (!guidedOpen) {
-            val left = OuraGuidedPlan.totalMs(if (next >= OuraGuidedPlan.BLOCKS.size) 0 else next) / 60_000
-            guidedText.text = "Next: block ${(if (next >= OuraGuidedPlan.BLOCKS.size) 0 else next) + 1} of " +
-                "${OuraGuidedPlan.BLOCKS.size}, about $left min to the end."
+            val from = if (next >= OuraGuidedPlan.BLOCKS.size) 0 else next
+            val left = OuraGuidedPlan.totalMs(from)
+            guidedText.text = "Next: block ${from + 1} of ${OuraGuidedPlan.BLOCKS.size} " +
+                "(${OuraGuidedPlan.BLOCKS[from].spoken}), about ${left / 60_000} min ${left / 1000 % 60} s to the end."
         }
     }
 
     private fun startGuided() {
         if (guidedOpen || claiming || pairingInProgress) return
         if (armed) disarm()
-        var start = guidedPrefs.getInt(KEY_GUIDED_NEXT, 0)
+        var start = guidedNext()
         if (start >= OuraGuidedPlan.BLOCKS.size) start = 0
         standby.holdForScreen(true)
         val generation = coordinator.setActiveOuraAcmRecorder(null)
@@ -639,7 +686,9 @@ class OuraGestureSetupActivity : Activity() {
         const val EXTRA_TIMESTAMP = "app.lawnchair.zer0.voice.z0live.OURA_TIMESTAMP"
         const val LAWNCHAIR_PACKAGE = "app.lawnchair.play.debug"
         const val BLUETOOTH_REQUEST = 714
-        private const val KEY_GUIDED_NEXT = "next_block"
+        /** Saved position in the short plan; [KEY_GUIDED_NEXT_LEGACY] held the old 29-block plan's. */
+        private const val KEY_GUIDED_NEXT = "next_block_short"
+        private const val KEY_GUIDED_NEXT_LEGACY = "next_block"
         /** Ground-truth labels for one debug recording (one capture = one label). */
         val RECORD_LABELS = listOf("normal", "light", "negative", "use")
     }

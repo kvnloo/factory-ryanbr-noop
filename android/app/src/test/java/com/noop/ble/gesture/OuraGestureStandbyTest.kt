@@ -56,29 +56,41 @@ class OuraGestureStandbyTest {
     }
 
     @Test
-    fun guidedPlanPutsTheDrivingGesturesAndTonightsNegativesFirst() {
+    fun shortGuidedPlanKeepsTheEssentialsAndScrollsInAboutFourMinutes() {
         val ids = OuraGuidedPlan.BLOCKS.map { it.id }
-        assertEquals(listOf("double-normal", "triple-normal", "neg-handling", "neg-walking"), ids.take(4))
+        assertEquals(listOf("double-normal", "triple-normal"), ids.take(2))
         assertEquals(ids.size, ids.toSet().size)
-        // Every tap class at every intensity, rapid singles/doubles/triples at every intensity, five negatives.
-        for (c in listOf("single", "double", "triple", "quadruple", "quintuple"))
+        for (c in listOf("double", "triple"))
             for (i in listOf("light", "normal", "firm")) assertTrue("$c-$i", "$c-$i" in ids)
-        for (c in listOf("single", "double", "triple"))
-            for (i in listOf("light", "normal", "firm")) assertTrue("rapid-$c-$i", "rapid-$c-$i" in ids)
-        assertEquals(5, OuraGuidedPlan.BLOCKS.count { it.kind == OuraGuidedPlan.Kind.NEGATIVE })
-        assertTrue(OuraGuidedPlan.BLOCKS.filter { it.kind == OuraGuidedPlan.Kind.NEGATIVE }.all { it.durationMs == 60_000L })
+        for (id in listOf("single-normal", "quadruple-normal", "quintuple-normal", "rapid-double-normal",
+            "scroll-up", "scroll-down", "scroll-up-hold", "scroll-down-hold")) assertTrue(id, id in ids)
+        assertEquals(0, OuraGuidedPlan.BLOCKS.count { it.kind == OuraGuidedPlan.Kind.NEGATIVE })
+        assertTrue(OuraGuidedPlan.BLOCKS.filter { it.kind == OuraGuidedPlan.Kind.TAPS }.all { it.reps == 4 })
+        val scrolls = OuraGuidedPlan.BLOCKS.filter { it.kind == OuraGuidedPlan.Kind.SCROLL }
+        assertEquals(listOf(6, 6), scrolls.map { it.reps })
+        assertEquals(listOf(5_000L, 5_000L),
+            OuraGuidedPlan.BLOCKS.filter { it.kind == OuraGuidedPlan.Kind.SCROLL_HOLD }.map { it.durationMs })
         val minutes = OuraGuidedPlan.totalMs() / 60_000.0
-        assertTrue("plan is $minutes min", minutes in 10.0..15.0)
-        assertTrue(OuraGuidedPlan.totalMs(10) < OuraGuidedPlan.totalMs())
+        assertTrue("plan is $minutes min", minutes in 3.0..4.5)
+        assertTrue(OuraGuidedPlan.totalMs(2) < OuraGuidedPlan.totalMs())
+    }
+
+    @Test
+    fun oldPlanPositionResumesAfterTheSharedNormalBlocks() {
+        assertEquals(0, OuraGuidedPlan.resumeFromLegacy(0))
+        assertEquals(0, OuraGuidedPlan.resumeFromLegacy(1))
+        assertEquals(2, OuraGuidedPlan.resumeFromLegacy(3))
     }
 
     @Test
     fun guidedCueAndRepOffsets() {
         val triple = OuraGuidedPlan.BLOCKS[1]
-        assertEquals("Block 2 of ${OuraGuidedPlan.BLOCKS.size}: triple taps, normal, 8 times, one at each beep. Go.",
+        assertEquals("Block 2 of ${OuraGuidedPlan.BLOCKS.size}: triple taps, normal, 4 times, one at each beep. Go.",
             OuraGuidedPlan.cue(1))
-        assertEquals(List(8) { it * 3_000L }, OuraGuidedPlan.repOffsets(triple))
-        assertEquals(emptyList<Long>(), OuraGuidedPlan.repOffsets(OuraGuidedPlan.BLOCKS[2]))
+        assertEquals(List(4) { it * 2_500L }, OuraGuidedPlan.repOffsets(triple))
+        val up = OuraGuidedPlan.BLOCKS.first { it.id == "scroll-up" }
+        assertEquals(List(6) { it * 2_000L }, OuraGuidedPlan.repOffsets(up))
+        assertEquals(emptyList<Long>(), OuraGuidedPlan.repOffsets(OuraGuidedPlan.BLOCKS.first { it.id == "scroll-up-hold" }))
     }
 
     @Test
@@ -89,14 +101,14 @@ class OuraGestureStandbyTest {
         rec.block(100, "start", 0, b)
         rec.cue(100, 0, 1)
         rec.block(25_000, "end", 0, b)
-        rec.block(30_000, "abort", 2, OuraGuidedPlan.BLOCKS[2])
+        rec.block(30_000, "skip", 10, OuraGuidedPlan.BLOCKS[10])
         rec.close()
         assertEquals(
             "# noop-oura-acm v2 label=guided gen=OuraRing4\n" +
-                "k,100,start,0,double-normal,TAPS,2,normal,8,3000,24000\n" +
+                "k,100,start,0,double-normal,TAPS,2,normal,4,2000,8000\n" +
                 "c,100,0,1\n" +
-                "k,25000,end,0,double-normal,TAPS,2,normal,8,3000,24000\n" +
-                "k,30000,abort,2,neg-handling,NEGATIVE,0,-,0,0,60000\n",
+                "k,25000,end,0,double-normal,TAPS,2,normal,4,2000,8000\n" +
+                "k,30000,skip,10,scroll-up,SCROLL,0,up,6,2000,12000\n",
             w.toString(),
         )
         assertEquals(1, rec.marks)
