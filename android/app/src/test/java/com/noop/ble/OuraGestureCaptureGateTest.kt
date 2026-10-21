@@ -23,6 +23,12 @@ class OuraGestureCaptureGateTest {
     fun armsWhileStreaming() = assertNull(refusal())
 
     @Test
+    fun armsOnAGen4Ring() {
+        // The S25 ring answers GetProductInfo with hardware id BLB_04B, which re-points it to Gen 4.
+        assertNull(refusal(gen = OuraRingGen.GEN4))
+    }
+
+    @Test
     fun armsWhileAHistoryDrainIsInFlight() {
         // The S25 capture: auth OK, live HR streaming, driver parked in FetchingHistory. That ring is
         // authenticated and connected; the drain must not lock the user out of onboarding.
@@ -55,7 +61,10 @@ class OuraGestureCaptureGateTest {
     fun keepsTheOtherPreconditions() {
         assertEquals("duration 0s is outside 1-300 s", refusal(seconds = 0))
         assertEquals("duration 301s is outside 1-300 s", refusal(seconds = 301))
-        assertEquals("ring generation is ${OuraRingGen.GEN4.displayName}, not Gen 3", refusal(gen = OuraRingGen.GEN4))
+        assertEquals(
+            "ring generation is ${OuraRingGen.GEN5.displayName}, not Gen 3 or Gen 4",
+            refusal(gen = OuraRingGen.GEN5),
+        )
         assertEquals("link is not authenticated", refusal(authenticated = false))
         assertEquals("no GATT write characteristic", refusal(writeLink = false))
         assertEquals("capture is already armed", refusal(armed = true))

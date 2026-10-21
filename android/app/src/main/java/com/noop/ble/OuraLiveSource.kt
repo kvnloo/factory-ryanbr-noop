@@ -466,6 +466,11 @@ class OuraLiveSource(
     private var lastTapSampleMs = -1L
     private var tapCaptureUntilMs = 0L
     private val tapCaptureTimeout = Runnable { stopGestureCapture() }
+    /** Per-capture counts for the end-of-capture line: `0x33` frames received, frames the codec accepted,
+     *  gestures the detector emitted. Frames are counted on the GATT thread, read on main at the end. */
+    @Volatile private var acmFramesSeen = 0
+    @Volatile private var acmFramesDecoded = 0
+    private var acmGestures = 0
 
     /** User-visible onboarding must call this on main; only an authenticated Gen 3 ring qualifies. */
     fun startGestureCapture(seconds: Int, onGesture: (OuraTapDetector.Gesture) -> Unit): Boolean {
@@ -486,6 +491,9 @@ class OuraLiveSource(
         tapEpoch++
         tapDetector.reset()
         lastTapSampleMs = -1
+        acmFramesSeen = 0
+        acmFramesDecoded = 0
+        acmGestures = 0
         tapSink = onGesture
         tapCaptureUntilMs = SystemClock.elapsedRealtime() + seconds * 1000L
         if (!write(OuraCommand("gesture_acm_on", OuraAcmCodec.enableForSeconds(seconds)))) {
@@ -505,6 +513,12 @@ class OuraLiveSource(
     fun stopGestureCapture() {
         handler.removeCallbacks(tapCaptureTimeout)
         val armed = tapSink != null
+        if (armed) {
+            // Only what was observed: a Gen 4 ring that answers with another layout shows frames seen > 0
+            // and decoded 0; one that ignores the request shows 0 frames.
+            log("Oura: gesture capture ended - ${acmFramesSeen} 0x33 frame(s) received, " +
+                "${acmFramesDecoded} decoded, ${acmGestures} gesture(s) recognised")
+        }
         tapSink = null
         tapCaptureUntilMs = 0
         tapEpoch++
@@ -517,13 +531,15 @@ class OuraLiveSource(
 
     /** Strict 0x33 parsing and ordered main-thread detector delivery. */
     private fun onGestureAcm(frame: OuraOuterFrame) {
-        if (tapSink == null || ringGen != OuraRingGen.GEN3) return
+        if (tapSink == null || ringGen !in GESTURE_CAPTURE_GENS) return
+        acmFramesSeen++
         val wire = ByteArray(frame.body.size + 2)
         wire[0] = 0x33
         wire[1] = frame.body.size.toByte()
         frame.body.forEachIndexed { i, b -> wire[i + 2] = b.toByte() }
         val axes = OuraAcmCodec.decode(wire)
         if (axes.isEmpty()) return
+        acmFramesDecoded++
         val epoch = tapEpoch
         handler.post {
             if (epoch != tapEpoch || tapSink == null) return@post
@@ -535,7 +551,10 @@ class OuraLiveSource(
                 val stamp = maxOf(SystemClock.elapsedRealtime(), lastTapSampleMs + 20)
                 lastTapSampleMs = stamp
                 val gesture = tapDetector.sample(stamp, axis.x, axis.y, axis.z)
-                if (gesture != null && epoch == tapEpoch) tapSink?.invoke(gesture)
+                if (gesture != null && epoch == tapEpoch) {
+                    acmGestures++
+                    tapSink?.invoke(gesture)
+                }
             }
         }
     }
@@ -2693,6 +2712,18 @@ class OuraLiveSource(
          * TLV records. `gesture_acm_on` itself goes through the same write queue, behind any `get_events`
          * in flight rather than racing it.
          */
+        /**
+         * Generations bounded gesture capture may be armed on. Gen 3 is the generation the `0x06` time-boxed
+         * ACM request and `0x33` frame layout were researched on (open_oura, Gen 3 Horizon). Gen 4 is
+         * included because the framing, auth and event-tag dictionary are generation-invariant
+         * (OURA_PROTOCOL.md s7.2) and Gen 4 already takes the same feature-mode writes for live HR; the
+         * request is time-boxed by the ring itself and turned off explicitly, and [OuraAcmCodec.decode]
+         * rejects any frame whose length or rate byte differs, so a different Gen 4 layout yields no taps
+         * rather than wrong ones (the end-of-capture line counts what arrived). Gen 5 stays out: it
+         * advertises extra characteristics and nothing about its motion stream has been observed.
+         */
+        internal val GESTURE_CAPTURE_GENS = setOf(OuraRingGen.GEN3, OuraRingGen.GEN4)
+
         internal fun gestureCaptureRefusal(
             seconds: Int,
             ringGen: OuraRingGen,
@@ -2702,7 +2733,7 @@ class OuraLiveSource(
             alreadyArmed: Boolean,
         ): String? = when {
             seconds !in 1..300 -> "duration ${seconds}s is outside 1-300 s"
-            ringGen != OuraRingGen.GEN3 -> "ring generation is ${ringGen.displayName}, not Gen 3"
+            ringGen !in GESTURE_CAPTURE_GENS -> "ring generation is ${ringGen.displayName}, not Gen 3 or Gen 4"
             phase != OuraDriverPhase.Streaming && phase != OuraDriverPhase.FetchingHistory ->
                 "driver phase is ${phase?.let { it::class.simpleName } ?: "none"}, not Streaming or FetchingHistory"
             !linkAuthenticated -> "link is not authenticated"
