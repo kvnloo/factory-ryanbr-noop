@@ -52,7 +52,9 @@ PHONE_TOOLS = {
 # PII redaction
 # ---------------------------------------------------------------------------------------------
 SAFE_KEYS = {"day", "from", "to", "latestDay", "wakeDay", "bed", "wake", "unit", "granularity", "key", "screen", "mode",
-             "note", "generatedAt", "latestDailyMetricDay", "medianBedtime", "medianWake", "error", "requestedSource"}
+             "note", "generatedAt", "latestDailyMetricDay", "medianBedtime", "medianWake", "error", "requestedSource",
+             # closed vocabulary from NOOP's sourceKind() (e.g. "oura (NOOP-computed)"); spaCy reads brand names as PERSON
+             "sources"}
 SAFE_VALUE = re.compile(r"^[\d\s:+\-.TZ%/]*$")
 ENTITIES = ["PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER", "LOCATION", "IP_ADDRESS", "URL", "CREDIT_CARD", "US_SSN",
             "IBAN_CODE", "US_DRIVER_LICENSE", "US_PASSPORT", "MEDICAL_LICENSE", "CRYPTO", "NRP"]
