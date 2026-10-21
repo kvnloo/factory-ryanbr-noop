@@ -45,6 +45,7 @@
 
     <!-- Keep the BLE link alive while collecting/offloading in the background. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Experimental fork-only Hermes agent access (com.noop.agent): a foreground service that runs only
          while the owner's time-boxed grant is live and serves bounded reads on the Tailscale address. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -274,6 +275,9 @@
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
             </intent-filter>
         </activity-alias>
+
+        <service android:name="com.noop.ble.gesture.OuraGestureRecordingService"
+            android:exported="false" android:foregroundServiceType="connectedDevice" />
 
         <!-- Keeps the WHOOP connection alive while the app is backgrounded or closed. Not exported;
              started/stopped only from within the app, gated by the "Keep connected in the
