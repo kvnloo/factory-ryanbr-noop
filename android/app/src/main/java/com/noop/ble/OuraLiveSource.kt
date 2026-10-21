@@ -470,10 +470,19 @@ class OuraLiveSource(
     /** User-visible onboarding must call this on main; only an authenticated Gen 3 ring qualifies. */
     fun startGestureCapture(seconds: Int, onGesture: (OuraTapDetector.Gesture) -> Unit): Boolean {
         require(Looper.myLooper() == Looper.getMainLooper()) { "Gesture capture must be armed on main" }
-        if (seconds !in 1..300 || ringGen != OuraRingGen.GEN3
-            || driver?.phase != OuraDriverPhase.Streaming
-            || _linkPhase.value != LinkPhase.AUTHENTICATED
-            || gatt == null || writeChar == null || tapSink != null) return false
+        val refusal = gestureCaptureRefusal(
+            seconds = seconds,
+            ringGen = ringGen,
+            phase = driver?.phase,
+            linkAuthenticated = _linkPhase.value == LinkPhase.AUTHENTICATED,
+            hasWriteLink = gatt != null && writeChar != null,
+            alreadyArmed = tapSink != null,
+        )
+        if (refusal != null) {
+            // Rare, user-initiated: name the precondition that refused instead of a bare false.
+            log("Oura: gesture capture not armed - $refusal")
+            return false
+        }
         tapEpoch++
         tapDetector.reset()
         lastTapSampleMs = -1
@@ -2672,6 +2681,36 @@ class OuraLiveSource(
     }
 
     companion object {
+        /**
+         * Why bounded gesture capture may not arm right now, or null when it may. Pure so the gate is
+         * JVM-tested.
+         *
+         * The driver may be `Streaming` OR `FetchingHistory`. Both mean authenticated and past the live-HR
+         * enable; a history drain is a background pass the ring can take minutes over (and, before the write
+         * queue, could never finish), and gesture capture does not interfere with it: `0x33` ACM frames are
+         * split off by their outer op in [handleNotification] before the `0x11` summary routing and the TLV
+         * reassembler, history event tags are all >= 0x41, and the batch-quiet timer only re-arms on decoded
+         * TLV records. `gesture_acm_on` itself goes through the same write queue, behind any `get_events`
+         * in flight rather than racing it.
+         */
+        internal fun gestureCaptureRefusal(
+            seconds: Int,
+            ringGen: OuraRingGen,
+            phase: OuraDriverPhase?,
+            linkAuthenticated: Boolean,
+            hasWriteLink: Boolean,
+            alreadyArmed: Boolean,
+        ): String? = when {
+            seconds !in 1..300 -> "duration ${seconds}s is outside 1-300 s"
+            ringGen != OuraRingGen.GEN3 -> "ring generation is ${ringGen.displayName}, not Gen 3"
+            phase != OuraDriverPhase.Streaming && phase != OuraDriverPhase.FetchingHistory ->
+                "driver phase is ${phase?.let { it::class.simpleName } ?: "none"}, not Streaming or FetchingHistory"
+            !linkAuthenticated -> "link is not authenticated"
+            !hasWriteLink -> "no GATT write characteristic"
+            alreadyArmed -> "capture is already armed"
+            else -> null
+        }
+
         /** The ring's base service + write/notify characteristics (OURA_PROTOCOL.md s1.1). Built from the
          *  protocol package's UUID strings so the facts live in exactly one place. */
         val SERVICE_UUID: UUID = UUID.fromString(OuraGatt.serviceUUID)
