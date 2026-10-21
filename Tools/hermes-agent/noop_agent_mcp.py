@@ -164,13 +164,15 @@ class Z0BridgeMinter:
             raise PhoneError(f"{path} must be 0600")
         data = json.loads(path.read_text())
         self.url, self._secret = data["url"].rstrip("/"), data["credential"]
-        self.aud, self.scopes, self.ttl = cfg["aud"], list(cfg.get("scopes") or []), int(cfg.get("ttl", 120))
+        self.aud, self.ttl = cfg["aud"], int(cfg.get("ttl", 120))
         self._token, self._exp = "", 0.0
 
     def token(self) -> str:
         if self._token and self._exp - 20 > time.time():
             return self._token
-        body = {"aud": self.aud, "ttl": self.ttl, **({"scope": self.scopes} if self.scopes else {})}
+        # No explicit scope: z0bridge mints every scope the credential still holds for this audience, so
+        # revoking one scope in z0bridge narrows the next token instead of breaking every call.
+        body = {"aud": self.aud, "ttl": self.ttl}
         req = urllib.request.Request(self.url + "/v1/token", data=json.dumps(body).encode(), method="POST",
                                      headers={"Authorization": "Bearer " + self._secret, "Content-Type": "application/json"})
         try:
