@@ -11,12 +11,13 @@ import java.io.Writer
  * serial, address or health data).
  *
  * One CSV per capture. Times are the phone's monotonic clock (`elapsedRealtime`, ms) at arrival.
- *   `# noop-oura-acm v1 label=<label> gen=<generation>`
+ *   `# noop-oura-acm v2 label=<label> gen=<generation>`
  *   `f,<ms>,<raw hex of the whole 0x33 frame>,<x1>,<y1>,<z1>[,<x2>,<y2>,<z2>]` (no axes = codec rejected it)
  *   `m,<ms>,<label>`   a ground-truth mark (the user pressed MARK / volume-down)
  *   `g,<ms>,<gesture>` what the current detector emitted
- *   `p,<ms>,<deviation>,<threshold>,<counted 0/1>,<spacing ms or -1>,<impulses after>,<blocked 0/1>`
- *      one detector excursion ([OuraTapDetector.Peak]); `<ms>` is the detector's sample clock
+ *   `b,<ms>,<peak>,<quiet level>,<impacts>,<first spacing ms or -1>,<duration ms>,<verdict>,<gesture or ->`
+ *      one detector burst ([OuraTapDetector.Burst]); `<ms>` is the detector's sample clock
+ * (v1 files carried `p,...` rows from the earlier gravity-magnitude detector instead of `b,...`.)
  *
  * Thread-safe: frames arrive on the GATT binder thread, marks on main.
  */
@@ -30,7 +31,7 @@ class OuraAcmRecorder(private val out: Writer, label: String, generation: String
     private var closed = false
 
     init {
-        out.write("# noop-oura-acm v1 label=${clean(label)} gen=${clean(generation)}\n")
+        out.write("# noop-oura-acm v2 label=${clean(label)} gen=${clean(generation)}\n")
     }
 
     @Synchronized
@@ -59,10 +60,10 @@ class OuraAcmRecorder(private val out: Writer, label: String, generation: String
     }
 
     @Synchronized
-    fun peak(p: OuraTapDetector.Peak) {
+    fun burst(b: OuraTapDetector.Burst) {
         if (closed) return
-        out.write("p,${p.atMs},${p.deviation.toInt()},${p.thresholdCounts.toInt()},${if (p.counted) 1 else 0}," +
-            "${p.spacingMs},${p.impulsesAfter},${if (p.blocked) 1 else 0}\n")
+        out.write("b,${b.atMs},${b.peak},${b.quietLevel},${b.impacts},${b.firstSpacingMs},${b.durationMs}," +
+            "${b.verdict.name},${b.gesture?.name ?: "-"}\n")
     }
 
     @Synchronized

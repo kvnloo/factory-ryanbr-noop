@@ -461,7 +461,7 @@ class OuraLiveSource(
 
     // A bounded, user-armed accelerometer session on the EXISTING Oura BLE link.
     // No new scan, pairing takeover, health-data path or always-on sampling.
-    private val tapDetector = OuraTapDetector(observer = { onTapPeak(it) })
+    private val tapDetector = OuraTapDetector(observer = { onTapBurst(it) })
     /**
      * Debug raw-motion recorder for the current capture, or null (the default). Attached only by the
      * gesture setup screen's opt-in recording mode; see [OuraAcmRecorder].
@@ -535,23 +535,25 @@ class OuraLiveSource(
     }
 
     /**
-     * One detector excursion (main thread, inside a capture). Logged so a missed tap can be explained from
-     * the strap log: its peak deviation against the threshold, the spacing to the previous impulse, and
-     * whether the cooldown swallowed it. Capped per capture; the recorder keeps every peak.
+     * One detector burst (main thread, inside a capture). Logged so a missed tap can be explained from the
+     * strap log: its peak jerk against the quiet level, the impacts counted and their spacing, and the
+     * detector's verdict. Capped per capture; the recorder keeps every burst.
      */
-    private fun onTapPeak(p: OuraTapDetector.Peak) {
-        acmRecorder?.peak(p)
+    private fun onTapBurst(b: OuraTapDetector.Burst) {
+        acmRecorder?.burst(b)
         if (tapPeaksLogged >= MAX_TAP_PEAK_LOG_LINES) return
         tapPeaksLogged++
-        val verdict = when {
-            p.counted -> "impulse ${p.impulsesAfter}"
-            p.blocked -> "in cooldown"
-            p.deviation >= p.thresholdCounts -> "too close to previous impulse"
-            else -> "below threshold"
+        val verdict = when (b.verdict) {
+            OuraTapDetector.Verdict.GESTURE -> b.gesture?.name ?: "gesture"
+            OuraTapDetector.Verdict.TOO_WEAK -> "below the minimum peak"
+            OuraTapDetector.Verdict.TOO_LONG -> "too long for taps"
+            OuraTapDetector.Verdict.IMPACT_COUNT -> "${b.impacts} impact(s), not 2-4"
+            OuraTapDetector.Verdict.IMPACT_SPACING -> "impacts too far apart"
+            OuraTapDetector.Verdict.BURST_LENGTH -> "too long for ${b.impacts} impacts"
         }
-        log("Oura: tap peak dev=${p.deviation.toInt()} (threshold ${p.thresholdCounts.toInt()}) " +
-            "spacing=${if (p.spacingMs < 0) "-" else "${p.spacingMs}ms"} - $verdict" +
-            if (tapPeaksLogged == MAX_TAP_PEAK_LOG_LINES) " (peak log cap reached for this capture)" else "")
+        log("Oura: tap burst peak=${b.peak} (quiet level ${b.quietLevel}) impacts=${b.impacts} " +
+            "spacing=${if (b.firstSpacingMs < 0) "-" else "${b.firstSpacingMs}ms"} length=${b.durationMs}ms - $verdict" +
+            if (tapPeaksLogged == MAX_TAP_PEAK_LOG_LINES) " (burst log cap reached for this capture)" else "")
     }
 
     /** OFF is best effort when Bluetooth has disconnected; the ring's timebox still expires. */
@@ -2762,7 +2764,7 @@ class OuraLiveSource(
          */
         internal val GESTURE_CAPTURE_GENS = setOf(OuraRingGen.GEN3, OuraRingGen.GEN4)
 
-        /** Strap-log lines per capture for [onTapPeak]. */
+        /** Strap-log lines per capture for [onTapBurst]. */
         private const val MAX_TAP_PEAK_LOG_LINES = 80
 
         /**
