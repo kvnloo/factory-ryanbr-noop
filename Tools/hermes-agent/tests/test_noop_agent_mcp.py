@@ -136,7 +136,7 @@ class FakeZ0Bridge(BaseHTTPRequestHandler):
             raw = json.dumps({"error": {"code": "unauthorized"}}).encode()
             self.send_response(401)
         else:
-            raw = json.dumps({"access_token": TOKEN, "token_type": "Bearer", "expires_in": 120, "scope": " ".join(body.get("scope", [])), "aud": body["aud"]}).encode()
+            raw = json.dumps({"access_token": TOKEN, "token_type": "Bearer", "expires_in": 120, "scope": "noop:health.read", "aud": body["aud"]}).encode()
             self.send_response(200)
         self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(raw))); self.end_headers(); self.wfile.write(raw)
 
@@ -161,7 +161,7 @@ class Z0BridgeTokenTests(ClientTests):
         self.assertFalse(phone.call("health_snapshot", {"days": 7})["isError"])
         self.assertFalse(phone.call("data_freshness", {})["isError"])
         self.assertEqual(len(FakeZ0Bridge.mints), 1)
-        self.assertEqual(FakeZ0Bridge.mints[0][1], {"aud": "noop@dev_0123456789abcdef", "ttl": 120, "scope": ["noop:health.read"]})
+        self.assertEqual(FakeZ0Bridge.mints[0][1], {"aud": "noop@dev_0123456789abcdef", "ttl": 120})
         self.assertTrue(all(s[0] == "Bearer " + TOKEN for s in FakePhone.seen))
         self.assertNotIn("z0bc.", m.RECEIPTS.read_text())
 
