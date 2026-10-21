@@ -637,12 +637,13 @@ class OuraLiveSource(
             OuraTapDetector.Verdict.GESTURE -> b.gesture?.name ?: "gesture"
             OuraTapDetector.Verdict.TOO_WEAK -> "below the minimum peak"
             OuraTapDetector.Verdict.TOO_LONG -> "too long for taps"
+            OuraTapDetector.Verdict.MOVING -> "ring moving (handling or walking)"
             OuraTapDetector.Verdict.IMPACT_COUNT -> "${b.impacts} impact(s), not 2-4"
             OuraTapDetector.Verdict.IMPACT_SPACING -> "impacts too far apart"
             OuraTapDetector.Verdict.BURST_LENGTH -> "too long for ${b.impacts} impacts"
         }
         log("Oura: tap burst peak=${b.peak} (quiet level ${b.quietLevel}) impacts=${b.impacts} " +
-            "spacing=${if (b.firstSpacingMs < 0) "-" else "${b.firstSpacingMs}ms"} length=${b.durationMs}ms - $verdict" +
+            "spacing=${if (b.firstSpacingMs < 0) "-" else "${b.firstSpacingMs}ms"} length=${b.durationMs}ms - $verdict still=${b.stillness}" +
             if (tapPeaksLogged == MAX_TAP_PEAK_LOG_LINES) " (burst log cap reached for this capture)" else "")
     }
 

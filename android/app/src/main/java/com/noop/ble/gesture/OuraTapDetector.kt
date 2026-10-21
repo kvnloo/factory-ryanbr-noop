@@ -1,6 +1,7 @@
 package com.noop.ble.gesture
 
 import kotlin.math.abs
+import kotlin.math.sqrt
 
 /**
  * Experimental, platform-pure tap classifier for Oura live-ACM samples (~50 Hz, two XYZ samples per
@@ -22,8 +23,14 @@ import kotlin.math.abs
  *    [minImpactPercentOfPeak]% of the burst peak, merged when closer than [minImpactSpacingSamples].
  *    The two taps of the recorded doubles were 140–320 ms apart (median 200 ms).
  *  - 2, 3 or 4 impacts, each gap at most [maxImpactSpacingSamples], within the length cap for that
- *    count, give DOUBLE, TRIPLE or QUADRUPLE. Triple and quadruple taps use the same rule but have no
- *    labelled recordings yet.
+ *    count, give DOUBLE, TRIPLE or QUADRUPLE.
+ *  - Stillness gate (retuned 2026-10-21 from the guided recording: 16 cued doubles/triples, 74 s of
+ *    phone handling and walking, plus the 20 marked doubles and 32 s of typing): a deliberate tap comes
+ *    from a still hand, while handling the phone or walking moves the whole ring. The standard deviation
+ *    of |a| over the [stillnessSamples] samples before a burst opens must be at most [maxStillness]
+ *    counts (1 g ≈ 1024). Offline, on the arrival-order replay, this cut gestures in the handling and
+ *    walking blocks from 14 to 1 while doubles went from 17 to 19 of 28 (the double length cap was
+ *    raised from 640 to 800 ms in the same change) and triples stayed at 4 of 8.
  *
  * Everything is integer and per sample. Times are one monotonic clock (Android elapsedRealtime, ms);
  * the detector counts samples and uses the clock only for gaps, regressions and [flush].
@@ -38,9 +45,12 @@ class OuraTapDetector(
     private val minImpactPercentOfPeak: Int = 20,
     private val minImpactSpacingSamples: Int = 7,
     private val maxImpactSpacingSamples: Int = 17,
-    private val maxDoubleSamples: Int = 32,
+    private val maxDoubleSamples: Int = 40,
     private val maxBurstSamples: Int = 60,
     private val floorWindow: Int = 64,
+    private val stillnessSamples: Int = 25,
+    /** 0 turns the stillness gate off. */
+    private val maxStillness: Int = 60,
     /**
      * Diagnostic only; never changes a decision. Called once per closed burst whose peak reached half of
      * [minPeak], so a missed tap can be explained from the log (too weak, one impact, too long, ...).
@@ -50,13 +60,14 @@ class OuraTapDetector(
     enum class Gesture { DOUBLE_TAP, TRIPLE_TAP, QUADRUPLE_TAP }
 
     /** What the detector decided about one burst. */
-    enum class Verdict { GESTURE, TOO_WEAK, TOO_LONG, IMPACT_COUNT, IMPACT_SPACING, BURST_LENGTH }
+    enum class Verdict { GESTURE, TOO_WEAK, TOO_LONG, MOVING, IMPACT_COUNT, IMPACT_SPACING, BURST_LENGTH }
 
     /**
      * One burst of jerk between quiet stretches. [atMs]: sample clock when it closed. [peak]: largest
      * jerk (counts). [quietLevel]: the level it had to reach. [impacts]: impacts counted (0 when not
      * evaluated; 5 means "more than 4"). [firstSpacingMs]: spacing of the first two impacts at the nominal
      * 20 ms per sample, or -1. [durationMs]: nominal burst length. [gesture]: what was emitted, if anything.
+     * [stillness]: standard deviation of |a| (counts) just before the burst opened; 0 until enough samples.
      */
     data class Burst(
         val atMs: Long,
@@ -67,6 +78,7 @@ class OuraTapDetector(
         val durationMs: Long,
         val verdict: Verdict,
         val gesture: Gesture?,
+        val stillness: Int = 0,
     )
 
     private val history = IntArray(floorWindow)
@@ -83,6 +95,11 @@ class OuraTapDetector(
     private var quiet = 0
     private var quietLevel = minQuietLevel
 
+    private val magnitudes = IntArray(stillnessSamples)
+    private var magnitudeCount = 0
+    private var magnitudeNext = 0
+    private var stillness = 0
+
     private var hasPrevious = false
     private var px = 0
     private var py = 0
@@ -95,6 +112,7 @@ class OuraTapDetector(
         require(minImpactPercentOfPeak in 1..100)
         require(minImpactSpacingSamples > 0 && maxImpactSpacingSamples > minImpactSpacingSamples)
         require(maxDoubleSamples > 0 && maxBurstSamples >= maxDoubleSamples && floorWindow > 0)
+        require(stillnessSamples > 1 && maxStillness >= 0)
     }
 
     /** Feed raw accelerometer XYZ *after* the BLE packet framing is validated. */
@@ -105,9 +123,11 @@ class OuraTapDetector(
         }
         if (lastSampleMs >= 0 && elapsedMs - lastSampleMs > MAX_GAP_MS) reset()
         lastSampleMs = elapsedMs
+        val magnitude = sqrt(x.toDouble() * x + y.toDouble() * y + z.toDouble() * z).toInt()
         if (!hasPrevious) {
             hasPrevious = true
             px = x; py = y; pz = z
+            rememberMagnitude(magnitude)
             return null
         }
         val e = abs(x - px) + abs(y - py) + abs(z - pz)
@@ -122,6 +142,7 @@ class OuraTapDetector(
                     burstLength = 0
                     below = 0
                     push(e)
+                    stillness = measureStillness()
                 }
                 quiet = 0
             } else {
@@ -133,6 +154,7 @@ class OuraTapDetector(
             if (below >= quietAfterSamples) out = close(elapsedMs)
         }
         remember(e)
+        rememberMagnitude(magnitude)
         return out
     }
 
@@ -156,6 +178,9 @@ class OuraTapDetector(
         below = 0
         quiet = 0
         quietLevel = minQuietLevel
+        magnitudeCount = 0
+        magnitudeNext = 0
+        stillness = 0
         hasPrevious = false
         lastSampleMs = -1L
     }
@@ -168,6 +193,23 @@ class OuraTapDetector(
         history[historyNext] = e
         historyNext = (historyNext + 1) % floorWindow
         if (historyCount < floorWindow) historyCount++
+    }
+
+    private fun rememberMagnitude(m: Int) {
+        magnitudes[magnitudeNext] = m
+        magnitudeNext = (magnitudeNext + 1) % stillnessSamples
+        if (magnitudeCount < stillnessSamples) magnitudeCount++
+    }
+
+    /** Standard deviation of |a| over the last [stillnessSamples] samples; 0 until the window is full. */
+    private fun measureStillness(): Int {
+        if (magnitudeCount < stillnessSamples) return 0
+        var s = 0L
+        var s2 = 0L
+        for (m in magnitudes) { s += m; s2 += m.toLong() * m }
+        val n = stillnessSamples.toLong()
+        val variance = (s2 * n - s * s) / (n * n)
+        return sqrt(maxOf(0L, variance).toDouble()).toInt()
     }
 
     /** Median of the remembered jerk values (upper median for an even count); 0 before any. */
@@ -188,6 +230,9 @@ class OuraTapDetector(
         val durationMs = length.toLong() * NOMINAL_SAMPLE_MS
         if (tooLong || length > maxBurstSamples) return report(atMs, peak, 0, -1, durationMs, Verdict.TOO_LONG, null)
         if (peak < minPeak) return report(atMs, peak, 0, -1, durationMs, Verdict.TOO_WEAK, null)
+        if (maxStillness > 0 && stillness > maxStillness) {
+            return report(atMs, peak, 0, -1, durationMs, Verdict.MOVING, null)
+        }
 
         var count = 0
         for (i in 0 until length) {
@@ -228,7 +273,7 @@ class OuraTapDetector(
     ): Gesture? {
         val obs = observer
         if (obs != null && peak * 2 >= minPeak) {
-            obs(Burst(atMs, peak, quietLevel, impacts, firstSpacingMs, durationMs, verdict, gesture))
+            obs(Burst(atMs, peak, quietLevel, impacts, firstSpacingMs, durationMs, verdict, gesture, stillness))
         }
         return gesture
     }
