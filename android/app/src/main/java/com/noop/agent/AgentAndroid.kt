@@ -114,8 +114,11 @@ class AndroidAgentActions(private val context: Context) : AgentActions {
 
     override fun openScreen(screen: String): JSONObject {
         if (foreground()) {
-            val r = AgentNav.request(screen)
-            val landed = AgentNav.awaitLanded(r.id, 2000)
+            // NOOP already has a visible window (the shell or one of its own screens), so it may bring the
+            // shell forward itself; MainActivity consumes the nonce-checked extra and AppRoot navigates.
+            val before = AgentNav.currentId()
+            context.startActivity(AgentAccess.navIntent(context, screen))
+            val landed = AgentNav.awaitLanded(screen, before, 3000)
             return JSONObject().put("screen", screen).put("mode", "in_app").put("landed", landed)
         }
         // Android blocks background activity starts; the owner taps to open instead (a natural confirmation).

@@ -107,6 +107,11 @@ class RedactorTests(unittest.TestCase):
         self.assertIn("<PHONE_NUMBER>", out["msg"])
         self.assertEqual(n, 1)
 
+    def test_source_kinds_are_not_mistaken_for_people(self):
+        out, n = m.Redactor().walk({"sources": ["oura (NOOP-computed)", "whoop"]})
+        self.assertEqual(out["sources"], ["oura (NOOP-computed)", "whoop"])
+        self.assertEqual(n, 0)
+
     def test_mac_addresses_are_redacted_even_without_presidio(self):
         out, n = m.Redactor().text("strap AA:BB:CC:DD:EE:FF")
         self.assertIn("<MAC_ADDRESS>", out)

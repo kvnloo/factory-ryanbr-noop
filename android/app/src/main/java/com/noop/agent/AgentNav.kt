@@ -2,8 +2,6 @@ package com.noop.agent
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -17,24 +15,36 @@ object AgentNav {
     private val ids = AtomicLong(0)
     private val state = MutableStateFlow<Request?>(null)
     val pending: StateFlow<Request?> = state
-    @Volatile private var latch: Pair<Long, CountDownLatch>? = null
+    @Volatile private var lastLanded: Request? = null
 
     const val EXTRA_SCREEN = "com.noop.agent.SCREEN"
+
+    fun currentId(): Long = ids.get()
 
     fun request(screen: String): Request {
         require(screen in AgentPolicy.SCREENS)
         val r = Request(ids.incrementAndGet(), screen)
-        latch = r.id to CountDownLatch(1)
         state.value = r
         return r
     }
 
     /** Called by the shell after it navigated for [id]. */
     fun landed(id: Long) {
-        if (state.value?.id == id) state.value = null
-        latch?.takeIf { it.first == id }?.second?.countDown()
+        val r = state.value
+        if (r?.id == id) {
+            lastLanded = r
+            state.value = null
+        }
     }
 
-    fun awaitLanded(id: Long, timeoutMs: Long): Boolean =
-        latch?.takeIf { it.first == id }?.second?.await(timeoutMs, TimeUnit.MILLISECONDS) ?: false
+    /** True once a request newer than [afterId] for [screen] has landed in the shell. */
+    fun awaitLanded(screen: String, afterId: Long, timeoutMs: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val l = lastLanded
+            if (l != null && l.id > afterId && l.screen == screen) return true
+            Thread.sleep(50)
+        }
+        return false
+    }
 }
