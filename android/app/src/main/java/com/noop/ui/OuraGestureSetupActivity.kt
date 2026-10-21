@@ -31,6 +31,14 @@ import java.io.File
 import com.noop.NoopApplication
 import com.noop.R
 import com.noop.ble.OuraZ0LiveHandoff
+import com.noop.ble.WhoopConnectionService
+import com.noop.ble.gesture.OuraGestureStandby
+import com.noop.ble.gesture.OuraGuidedPlan
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.speech.tts.TextToSpeech
 
 /**
  * Opt-in bounded gesture onboarding on NOOP's already-connected Oura Gen 3 BLE source.
@@ -67,6 +75,28 @@ class OuraGestureSetupActivity : Activity() {
     private var recordLabel = 0
     private var recorder: OuraAcmRecorder? = null
     private var recordFile: File? = null
+    private val standby by lazy { OuraGestureStandby.get(this) }
+    private lateinit var standbyToggle: Button
+    private lateinit var standbyStatus: TextView
+    private lateinit var guidedButton: Button
+    private lateinit var guidedPause: Button
+    private lateinit var guidedRestart: Button
+    private lateinit var guidedText: TextView
+    /** Guided recording: the block running (or next to run) and whether a session is open. */
+    private var guidedOpen = false
+    private var guidedRunning = false
+    private var guidedIndex = 0
+    private val guidedToken = Any()
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
+    private var tone: ToneGenerator? = null
+    private val guidedPrefs by lazy { getSharedPreferences("oura_guided_recording", MODE_PRIVATE) }
+    private val standbyRefresh = object : Runnable {
+        override fun run() {
+            refreshStandby()
+            if (visible) handler.postDelayed(this, 2_000)
+        }
+    }
     private val endNotice = Runnable {
         val rearm = autoRearm && visible && !recordMode && armed
         val recording = recorder != null
@@ -120,6 +150,10 @@ class OuraGestureSetupActivity : Activity() {
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             }
         label("Oura ring → z0live", 24f)
+        label(getString(R.string.oura_gesture_map), 17f)
+        standbyToggle = button(getString(R.string.oura_standby_toggle_off)) { toggleStandby() }
+        standbyStatus = label("", 15f)
+        label(getString(R.string.oura_standby_explain), 14f)
         label(
             "1. In NOOP → Devices, connect your existing Oura Ring Gen 3. Do NOT reset or rekey it.\n" +
             "2. In Lawnchair z0live, pair and start voice yourself, then mute it.\n" +
@@ -153,6 +187,16 @@ class OuraGestureSetupActivity : Activity() {
             labelButton.text = "Recording label: ${RECORD_LABELS[recordLabel]}"
         }.apply { isEnabled = false }
         markButton = button("Mark tap (or press volume down)") { markTap() }.apply { isEnabled = false }
+        label(getString(R.string.oura_guided_title), 18f)
+        label(getString(R.string.oura_guided_explain), 14f)
+        guidedText = label("", 16f)
+        guidedButton = button(getString(R.string.oura_guided_start)) { startGuided() }
+        guidedPause = button(getString(R.string.oura_guided_pause)) { pauseGuided(close = true) }.apply { isEnabled = false }
+        guidedRestart = button(getString(R.string.oura_guided_restart)) {
+            if (guidedOpen) return@button
+            guidedPrefs.edit().putInt(KEY_GUIDED_NEXT, 0).apply()
+            refreshGuided()
+        }
         button("Open NOOP devices / connect ring") {
             disarm()
             startActivity(Intent(this, MainActivity::class.java))
@@ -194,6 +238,8 @@ class OuraGestureSetupActivity : Activity() {
         button("Open z0live voice controls") { openControls() }
         button("Close setup") { disarm(); finish() }
         setContentView(scroll)
+        refreshStandby()
+        refreshGuided()
     }
 
     private fun dp(n: Int): Int = (n * resources.displayMetrics.density + 0.5f).toInt()
@@ -215,7 +261,11 @@ class OuraGestureSetupActivity : Activity() {
     private fun begin(leaseReady: Boolean = false, rearm: Boolean = false) {
         // Never start a local-only gesture capture while the optional broker
         // credentials are still being replaced on the export worker.
-        if (armed || claiming || pairingInProgress) return
+        if (armed || claiming || pairingInProgress || guidedOpen) return
+        if (standby.enabled && !recordMode) {
+            status.text = getString(R.string.oura_standby_screen_busy)
+            return
+        }
         if (Build.VERSION.SDK_INT >= 31 &&
             (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED ||
                 checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)) {
@@ -242,11 +292,13 @@ class OuraGestureSetupActivity : Activity() {
         }
         if (!rearm) {
             // An automatic re-arm keeps the calibration: three trials once per screen visit, not per window.
-            doubles = 0
+            // Calibration is once per install, not once per arm: a calibrated owner goes straight to live taps.
+            doubles = if (standby.calibrated) 3 else 0
             sequence = 0
-            progress.text = "Recognized double taps: 0 / 3"
+            progress.text = "Recognized double taps: ${minOf(doubles, 3)} / 3"
         }
         if (recordMode) {
+            standby.holdForScreen(true)
             val generation = coordinator.setActiveOuraAcmRecorder(null)
             val opened = if (generation == null) null else runCatching {
                 OuraAcmRecorder.open(filesDir, RECORD_LABELS[recordLabel], generation, System.currentTimeMillis())
@@ -255,6 +307,7 @@ class OuraGestureSetupActivity : Activity() {
                 opened?.first?.close()
                 opened?.second?.delete()
                 status.text = "Could not start a recording: no live Oura ring."
+                standby.holdForScreen(false)
                 return
             }
             recorder = opened.first
@@ -272,6 +325,7 @@ class OuraGestureSetupActivity : Activity() {
             if (gesture == OuraTapDetector.Gesture.DOUBLE_TAP) {
                 doubles++
                 progress.text = "Recognized double taps: ${minOf(doubles, 3)} / 3"
+                if (doubles == 3) standby.calibrated = true
                 if (doubles <= 3) {
                     status.text = if (doubles < 3) "Tap the ring twice again (${3 - doubles} trial(s) remain)."
                         else "Three trials detected. Next double tap will invoke z0live."
@@ -284,6 +338,7 @@ class OuraGestureSetupActivity : Activity() {
         }
         if (!ok) {
             closeRecording(keep = false)
+            standby.holdForScreen(false)
             export.execute { runCatching { broker.release() } }
             status.text = "NOOP needs an authenticated, actively connected Gen 3 ring. " +
                 "Open NOOP → Devices, select Oura Ring 3 and reconnect, then retry."
@@ -385,7 +440,8 @@ class OuraGestureSetupActivity : Activity() {
         claimGeneration++
         claiming = false
         pairingInProgress = false
-        export.execute { runCatching { broker.release() } }
+        // The broker lease is per paired device: releasing it would also cut off Always listen.
+        if (!standby.enabled) export.execute { runCatching { broker.release() } }
         if (armed) coordinator.stopActiveOuraGestureCapture()
         armed = false
         handler.removeCallbacks(endNotice)
@@ -393,24 +449,197 @@ class OuraGestureSetupActivity : Activity() {
         if (::stop.isInitialized) stop.isEnabled = false
         if (::status.isInitialized) status.text = "Gesture capture OFF."
         closeRecording(keep = true)   // after the status line, so the saved-file line is what stays
+        if (!guidedOpen) standby.holdForScreen(false)
     }
 
-    override fun onResume() { super.onResume(); visible = true }
+    override fun onResume() {
+        super.onResume()
+        visible = true
+        handler.removeCallbacks(standbyRefresh)
+        handler.post(standbyRefresh)
+    }
     override fun onPause() { visible = false; super.onPause() }
     override fun onDestroy() {
+        if (guidedOpen) pauseGuided(close = true)
         disarm()
-        export.execute { runCatching { broker.release() }; export.shutdown() }
+        tts?.shutdown()
+        tone?.release()
+        export.execute { if (!standby.enabled) runCatching { broker.release() }; export.shutdown() }
         super.onDestroy()
     }
 
 
+    private fun toggleStandby() {
+        if (!standby.enabled) {
+            if (Build.VERSION.SDK_INT >= 31 &&
+                (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)) {
+                requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT,
+                    Manifest.permission.BLUETOOTH_SCAN), BLUETOOTH_REQUEST)
+                return
+            }
+            if (armed) disarm()
+            // Visible here, so the connection service may be (re)promoted now; it keeps the ring linked
+            // with the screen off. NOOP's own Background connection setting still decides.
+            if (NoopPrefs.backgroundConnection(this)) WhoopConnectionService.start(this)
+            standby.setEnabled(true)
+        } else {
+            standby.setEnabled(false)
+        }
+        refreshStandby()
+    }
+
+    private fun refreshStandby() {
+        if (!::standbyToggle.isInitialized) return
+        val on = standby.enabled
+        standbyToggle.text = getString(if (on) R.string.oura_standby_toggle_on else R.string.oura_standby_toggle_off)
+        val line = when {
+            !on -> getString(R.string.oura_standby_status_off)
+            standby.listening -> getString(R.string.oura_standby_status_listening)
+            else -> getString(R.string.oura_standby_status_waiting)
+        }
+        val background = if (on && !NoopPrefs.backgroundConnection(this)) "\n" + getString(R.string.oura_standby_needs_background) else ""
+        val last = standby.lastResult.takeIf { on && it.isNotEmpty() }?.let { "\nLast: $it" } ?: ""
+        standbyStatus.text = line + background + last
+    }
+
+    // MARK: - Guided recording
+
+    private fun refreshGuided() {
+        if (!::guidedButton.isInitialized) return
+        val next = guidedPrefs.getInt(KEY_GUIDED_NEXT, 0).coerceIn(0, OuraGuidedPlan.BLOCKS.size)
+        if (!guidedOpen) guidedIndex = next
+        guidedButton.text = when {
+            next == 0 || next >= OuraGuidedPlan.BLOCKS.size -> getString(R.string.oura_guided_start)
+            else -> getString(R.string.oura_guided_resume, next + 1, OuraGuidedPlan.BLOCKS.size)
+        }
+        guidedButton.isEnabled = !guidedOpen
+        guidedPause.isEnabled = guidedOpen
+        guidedRestart.isEnabled = !guidedOpen && next > 0
+        if (!guidedOpen) {
+            val left = OuraGuidedPlan.totalMs(if (next >= OuraGuidedPlan.BLOCKS.size) 0 else next) / 60_000
+            guidedText.text = "Next: block ${(if (next >= OuraGuidedPlan.BLOCKS.size) 0 else next) + 1} of " +
+                "${OuraGuidedPlan.BLOCKS.size}, about $left min to the end."
+        }
+    }
+
+    private fun startGuided() {
+        if (guidedOpen || claiming || pairingInProgress) return
+        if (armed) disarm()
+        var start = guidedPrefs.getInt(KEY_GUIDED_NEXT, 0)
+        if (start >= OuraGuidedPlan.BLOCKS.size) start = 0
+        standby.holdForScreen(true)
+        val generation = coordinator.setActiveOuraAcmRecorder(null)
+        val opened = if (generation == null) null else runCatching {
+            OuraAcmRecorder.open(filesDir, "guided", generation, System.currentTimeMillis())
+        }.getOrNull()
+        val ok = opened != null && coordinator.setActiveOuraAcmRecorder(opened.first) != null &&
+            coordinator.startActiveOuraGestureCapture(OuraLiveSourceSeconds, continuous = true) { g ->
+                recorder?.gesture(SystemClock.elapsedRealtime(), g.name)
+            }
+        if (!ok) {
+            coordinator.setActiveOuraAcmRecorder(null)
+            opened?.first?.close()
+            opened?.second?.delete()
+            standby.holdForScreen(false)
+            guidedText.text = getString(R.string.oura_guided_no_ring)
+            return
+        }
+        recorder = opened!!.first
+        recordFile = opened.second
+        guidedOpen = true
+        guidedIndex = start
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (tts == null) tts = TextToSpeech(this) { st -> ttsReady = st == TextToSpeech.SUCCESS }
+        if (tone == null) tone = runCatching { ToneGenerator(AudioManager.STREAM_MUSIC, 90) }.getOrNull()
+        refreshGuided()
+        // Give the speech engine a moment to bind before the first announcement.
+        handler.postAtTime({ runBlock(guidedIndex) }, guidedToken, SystemClock.uptimeMillis() + 1_200)
+    }
+
+    private fun runBlock(index: Int) {
+        if (!guidedOpen) return
+        if (index >= OuraGuidedPlan.BLOCKS.size) { finishGuided(); return }
+        val block = OuraGuidedPlan.BLOCKS[index]
+        guidedIndex = index
+        guidedRunning = true
+        val cue = OuraGuidedPlan.cue(index)
+        guidedText.text = cue
+        speak(cue)
+        buzz(80)
+        val t0 = SystemClock.uptimeMillis() + OuraGuidedPlan.LEAD_IN_MS
+        handler.postAtTime({
+            recorder?.block(SystemClock.elapsedRealtime(), "start", index, block)
+            if (block.kind != OuraGuidedPlan.Kind.TAPS) beep(250)
+        }, guidedToken, t0)
+        OuraGuidedPlan.repOffsets(block).forEachIndexed { rep, offset ->
+            handler.postAtTime({
+                recorder?.cue(SystemClock.elapsedRealtime(), index, rep + 1)
+                beep(120)
+                guidedText.text = "$cue\nRep ${rep + 1} of ${block.reps}"
+            }, guidedToken, t0 + offset)
+        }
+        handler.postAtTime({
+            recorder?.block(SystemClock.elapsedRealtime(), "end", index, block)
+            guidedRunning = false
+            buzz(60)
+            beep(400)
+            guidedPrefs.edit().putInt(KEY_GUIDED_NEXT, index + 1).apply()
+            guidedText.text = "Block ${index + 1} done."
+        }, guidedToken, t0 + block.durationMs)
+        handler.postAtTime({ runBlock(index + 1) }, guidedToken, t0 + block.durationMs + OuraGuidedPlan.GAP_MS)
+    }
+
+    /** Pause: drop the block in progress (marked `abort`), save the file; resume restarts that block. */
+    private fun pauseGuided(close: Boolean) {
+        if (!guidedOpen) return
+        handler.removeCallbacksAndMessages(guidedToken)
+        if (guidedRunning) {
+            recorder?.block(SystemClock.elapsedRealtime(), "abort", guidedIndex, OuraGuidedPlan.BLOCKS[guidedIndex])
+            guidedPrefs.edit().putInt(KEY_GUIDED_NEXT, guidedIndex).apply()
+        }
+        guidedRunning = false
+        tts?.stop()
+        if (close) {
+            guidedOpen = false
+            coordinator.stopActiveOuraGestureCapture()
+            closeRecording(keep = true)
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            standby.holdForScreen(false)
+        }
+        refreshGuided()
+    }
+
+    private fun finishGuided() {
+        speak(getString(R.string.oura_guided_done))
+        guidedPrefs.edit().putInt(KEY_GUIDED_NEXT, OuraGuidedPlan.BLOCKS.size).apply()
+        pauseGuided(close = true)
+        guidedText.text = getString(R.string.oura_guided_done) + " " + status.text
+    }
+
+    private fun speak(text: String) {
+        if (ttsReady) tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "oura-guided")
+    }
+
+    private fun beep(ms: Int) { runCatching { tone?.startTone(ToneGenerator.TONE_PROP_BEEP, ms) } }
+
+    private fun buzz(ms: Long) {
+        runCatching {
+            @Suppress("DEPRECATION")
+            val v = getSystemService(VIBRATOR_SERVICE) as? Vibrator
+            v?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+        }
+    }
+
     companion object {
+        /** Ring-side box for the guided recording's continuous capture (renewed by the source). */
+        private const val OuraLiveSourceSeconds = 300
         const val EXTRA_CAPABILITY = "app.lawnchair.zer0.voice.z0live.CAPABILITY"
         const val EXTRA_GESTURE = "app.lawnchair.zer0.voice.z0live.OURA_GESTURE"
         const val EXTRA_SEQUENCE = "app.lawnchair.zer0.voice.z0live.OURA_SEQUENCE"
         const val EXTRA_TIMESTAMP = "app.lawnchair.zer0.voice.z0live.OURA_TIMESTAMP"
         const val LAWNCHAIR_PACKAGE = "app.lawnchair.play.debug"
         const val BLUETOOTH_REQUEST = 714
+        private const val KEY_GUIDED_NEXT = "next_block"
         /** Ground-truth labels for one debug recording (one capture = one label). */
         val RECORD_LABELS = listOf("normal", "light", "negative", "use")
     }

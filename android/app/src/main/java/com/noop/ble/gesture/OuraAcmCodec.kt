@@ -35,6 +35,13 @@ object OuraAcmCodec {
         }
     }
 
+    /** The ring's frame counter (byte 3, wraps at 256) of a frame [decode] accepts, else null. */
+    fun sequence(frame: ByteArray): Int? =
+        if (decode(frame).isEmpty()) null else frame[3].toInt() and 0xff
+
+    /** Frames the ring sent between two consecutive counters that never arrived (0 for a repeat). */
+    fun framesLostBetween(previous: Int, next: Int): Int = (next - previous - 1).mod(256).let { if (it == 255) 0 else it }
+
     /** Opt-in bounded request candidate. Never write unless user explicitly arms. */
     fun enableForSeconds(seconds: Int): IntArray {
         require(seconds in 1..300) { "Capture must be 1-300 seconds" }

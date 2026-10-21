@@ -484,8 +484,77 @@ class OuraLiveSource(
     @Volatile private var acmFramesDecoded = 0
     private var acmGestures = 0
 
-    /** User-visible onboarding must call this on main; only an authenticated Gen 3 ring qualifies. */
-    fun startGestureCapture(seconds: Int, onGesture: (OuraTapDetector.Gesture) -> Unit): Boolean {
+    /**
+     * Continuous capture for the always-listen standby and guided recording: no local timeout. The ring's
+     * own request stays time-boxed ([STANDBY_RING_SECONDS]) and is re-sent every [STANDBY_RENEW_MS]
+     * without an OFF in between, so the ring never runs unattended for longer than one box if NOOP dies.
+     */
+    private var standbyCapture = false
+    private var standbyArmedAtMs = 0L
+    private var standbyRenewals = 0
+    /** Last `0x33` arrival (GATT thread writes, main reads) and the ring's frame counter for loss accounting. */
+    @Volatile private var lastAcmFrameMs = 0L
+    @Volatile private var lastAcmSeq = -1
+    @Volatile private var acmFramesLost = 0
+    private var statFramesAt = 0
+    private var statLostAt = 0
+    private var statAtMs = 0L
+    private val standbyRenew = object : Runnable {
+        override fun run() {
+            if (!standbyCapture || tapSink == null) return
+            if (write(OuraCommand("gesture_acm_on", OuraAcmCodec.enableForSeconds(STANDBY_RING_SECONDS)))) {
+                standbyRenewals++
+            }
+            handler.postDelayed(this, STANDBY_RENEW_MS)
+        }
+    }
+    private val standbyWatch = object : Runnable {
+        override fun run() {
+            if (!standbyCapture || tapSink == null) return
+            val now = SystemClock.elapsedRealtime()
+            val since = lastAcmFrameMs.takeIf { it > 0 } ?: standbyArmedAtMs
+            if (now - since > STANDBY_STALL_MS) {
+                // The ring stopped streaming (its box expired, or it ignored a renewal). Drop the capture so
+                // the standby owner re-arms it from scratch, and say so: this is the firmware-tolerance fact.
+                log("Oura: gesture standby stalled - no 0x33 frame for ${(now - since) / 1000}s after " +
+                    "${standbyRenewals} renewal(s); re-arming")
+                stopGestureCapture()
+                return
+            }
+            val elapsed = now - standbyArmedAtMs
+            val every = if (elapsed < STANDBY_DETAIL_MS) 60_000L else 600_000L
+            if (now - statAtMs >= every) logStandbyStats(now)
+            handler.postDelayed(this, STANDBY_WATCH_MS)
+        }
+    }
+
+    /** Whether a gesture capture (bounded or continuous) currently owns the motion stream. Main thread. */
+    val gestureCaptureArmed: Boolean get() = tapSink != null
+
+    /** One standby health line: frames and frames lost since the last line, their rate, the ring battery. */
+    private fun logStandbyStats(now: Long) {
+        val frames = acmFramesSeen - statFramesAt
+        val lost = acmFramesLost - statLostAt
+        val secs = ((now - statAtMs).coerceAtLeast(1)) / 1000.0
+        log("Oura: gesture standby ${(now - standbyArmedAtMs) / 60_000} min - $frames frame(s) in " +
+            "${"%.0f".format(secs)}s (${"%.1f".format(frames / secs)}/s), $lost lost by sequence, " +
+            "$standbyRenewals renewal(s), ring battery ${_batteryPct.value?.let { "$it%" } ?: "unknown"}")
+        statFramesAt = acmFramesSeen
+        statLostAt = acmFramesLost
+        statAtMs = now
+        tapPeaksLogged = 0   // a continuous capture gets a fresh burst-line budget per stats window
+    }
+
+    /**
+     * Arm gesture capture on main; only an authenticated Gen 3/4 ring qualifies. [continuous] is the
+     * always-listen standby (and guided recording): it ignores [seconds] locally and keeps the ring's
+     * time-boxed request renewed until [stopGestureCapture].
+     */
+    fun startGestureCapture(
+        seconds: Int,
+        continuous: Boolean = false,
+        onGesture: (OuraTapDetector.Gesture) -> Unit,
+    ): Boolean {
         require(Looper.myLooper() == Looper.getMainLooper()) { "Gesture capture must be armed on main" }
         val refusal = gestureCaptureRefusal(
             seconds = seconds,
@@ -508,9 +577,16 @@ class OuraLiveSource(
         loggedUndecodedAcm = false
         acmFramesDecoded = 0
         acmGestures = 0
+        acmFramesLost = 0
+        lastAcmSeq = -1
+        lastAcmFrameMs = 0
         tapSink = onGesture
-        tapCaptureUntilMs = SystemClock.elapsedRealtime() + seconds * 1000L
-        if (!write(OuraCommand("gesture_acm_on", OuraAcmCodec.enableForSeconds(seconds)))) {
+        val now = SystemClock.elapsedRealtime()
+        standbyCapture = continuous
+        tapCaptureUntilMs = if (continuous) Long.MAX_VALUE else now + seconds * 1000L
+        val ringSeconds = if (continuous) STANDBY_RING_SECONDS else seconds
+        if (!write(OuraCommand("gesture_acm_on", OuraAcmCodec.enableForSeconds(ringSeconds)))) {
+            standbyCapture = false
             tapSink = null
             tapCaptureUntilMs = 0
             tapEpoch++
@@ -518,8 +594,22 @@ class OuraLiveSource(
             return false
         }
         handler.removeCallbacks(tapCaptureTimeout)
-        handler.postDelayed(tapCaptureTimeout, seconds * 1000L)
-        log("Oura: bounded gesture training armed for "+seconds+"s")
+        handler.removeCallbacks(standbyRenew)
+        handler.removeCallbacks(standbyWatch)
+        if (continuous) {
+            standbyArmedAtMs = now
+            standbyRenewals = 0
+            statFramesAt = 0
+            statLostAt = 0
+            statAtMs = now
+            handler.postDelayed(standbyRenew, STANDBY_RENEW_MS)
+            handler.postDelayed(standbyWatch, STANDBY_WATCH_MS)
+            log("Oura: continuous gesture capture armed (ring box ${STANDBY_RING_SECONDS}s, renewed every " +
+                "${STANDBY_RENEW_MS / 1000}s)")
+        } else {
+            handler.postDelayed(tapCaptureTimeout, seconds * 1000L)
+            log("Oura: bounded gesture training armed for "+seconds+"s")
+        }
         return true
     }
 
@@ -559,7 +649,11 @@ class OuraLiveSource(
     /** OFF is best effort when Bluetooth has disconnected; the ring's timebox still expires. */
     fun stopGestureCapture() {
         handler.removeCallbacks(tapCaptureTimeout)
+        handler.removeCallbacks(standbyRenew)
+        handler.removeCallbacks(standbyWatch)
         val armed = tapSink != null
+        if (armed && standbyCapture) logStandbyStats(SystemClock.elapsedRealtime())
+        standbyCapture = false
         if (armed) {
             // Only what was observed: a Gen 4 ring that answers with another layout shows frames seen > 0
             // and decoded 0; one that ignores the request shows 0 frames.
@@ -580,6 +674,11 @@ class OuraLiveSource(
     private fun onGestureAcm(wire: ByteArray) {
         if (tapSink == null || ringGen !in GESTURE_CAPTURE_GENS) return
         acmFramesSeen++
+        lastAcmFrameMs = SystemClock.elapsedRealtime()
+        OuraAcmCodec.sequence(wire)?.let { seq ->
+            if (lastAcmSeq >= 0) acmFramesLost += OuraAcmCodec.framesLostBetween(lastAcmSeq, seq)
+            lastAcmSeq = seq
+        }
         val axes = OuraAcmCodec.decode(wire)
         acmRecorder?.frame(SystemClock.elapsedRealtime(), wire, axes)
         if (axes.isEmpty()) {
@@ -2766,6 +2865,16 @@ class OuraLiveSource(
 
         /** Strap-log lines per capture for [onTapBurst]. */
         private const val MAX_TAP_PEAK_LOG_LINES = 80
+
+        /** The ring-side box of a continuous capture: what the ring streams for if NOOP dies mid-capture. */
+        internal const val STANDBY_RING_SECONDS = 300
+        /** Re-send the box well before it expires, with no OFF in between; [STANDBY_STALL_MS] catches a ring that ignores it. */
+        internal const val STANDBY_RENEW_MS = 120_000L
+        /** No `0x33` frame for this long while continuous = the ring stopped; drop and let the owner re-arm. */
+        internal const val STANDBY_STALL_MS = 20_000L
+        private const val STANDBY_WATCH_MS = 5_000L
+        /** Per-minute standby health lines for this long after arming (battery measurement), then 10-min. */
+        private const val STANDBY_DETAIL_MS = 45 * 60_000L
 
         /**
          * Why bounded gesture capture may not arm right now, or null when it may. Pure so the gate is

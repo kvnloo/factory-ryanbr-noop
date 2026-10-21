@@ -358,6 +358,17 @@
             android:name="com.noop.alarm.SmartAlarmReceiver"
             android:exported="false" />
 
+        <!-- Oura "Always listen": resume the opt-in ring gesture standby after a reboot or an app update.
+             A no-op unless the owner turned it on in the gesture setup screen. -->
+        <receiver
+            android:name="com.noop.ble.gesture.OuraGestureStandbyBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <!-- Re-arms the persisted hard-deadline alarm after a reboot so an overnight restart can't
              silently drop the user's wake. -->
         <receiver
