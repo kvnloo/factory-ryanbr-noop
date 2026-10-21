@@ -19,10 +19,17 @@ Gen 3 capture before any transport writes are enabled. The ring
 does not expose a verified contact/touch double-tap sensor: taps are *inferred*
 from accelerometer impulses.
 
-The pure `OuraTapDetector` consumes timestamped XYZ integers, uses a gravity
-baseline, refractory/quiet/cooldown gates, and emits double/triple/quad gestures.
-**380 counts is a synthetic-test starting estimate, not a hardware result.**
-It intentionally does not read physiological measurements or persist data.
+The pure `OuraTapDetector` consumes timestamped XYZ integers and emits
+double/triple/quad gestures. It works on per-sample jerk (`|dx|+|dy|+|dz|`):
+a burst must follow a quiet stretch whose level adapts to a rolling median of
+the jerk, and the impacts inside the burst are counted by local maxima. Its
+constants come from one owner's labelled recording on a worn Oura Ring 4
+(20 marked double taps and ~32 s of typing). Replayed in arrival order it
+recognised 15 of the 20 doubles with no gesture during the typing; the earlier
+gravity-magnitude detector (380 counts) recognised 1 and fired 5 times while
+typing. One person, one session: light-tap, negative and triple-tap recordings
+are still needed. It intentionally does not read physiological measurements or
+persist data.
 
 ## Handoff already possible from a visible UI
 

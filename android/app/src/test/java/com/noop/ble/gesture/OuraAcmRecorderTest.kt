@@ -6,11 +6,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.StringWriter
 
-/** The debug recorder's CSV and the detector's per-excursion diagnostics (synthetic samples only). */
+/** The debug recorder's CSV and the detector's per-burst diagnostics (synthetic samples only). */
 class OuraAcmRecorderTest {
 
     @Test
-    fun writesHeaderFramesMarksGesturesAndPeaks() {
+    fun writesHeaderFramesMarksGesturesAndBursts() {
         val w = StringWriter()
         val rec = OuraAcmRecorder(w, "normal", "Oura Ring 4")
         val wire = byteArrayOf(0x33, 0x0e, 0x32, 0x4e, 0x5e, 0x02, 0x99.toByte(), 0x02,
@@ -19,16 +19,17 @@ class OuraAcmRecorderTest {
         rec.frame(1040, byteArrayOf(0x33, 0x01, 0x00), emptyList())
         rec.mark(1500, "normal")
         rec.gesture(1600, "DOUBLE_TAP")
-        rec.peak(OuraTapDetector.Peak(1200, 412.7, 380.0, true, 230, 2, false))
+        rec.burst(OuraTapDetector.Burst(1200, 812, 150, 2, 200, 300, OuraTapDetector.Verdict.GESTURE,
+            OuraTapDetector.Gesture.DOUBLE_TAP))
         rec.close()
         rec.mark(9999, "after-close")   // ignored
         assertEquals(
-            "# noop-oura-acm v1 label=normal gen=OuraRing4\n" +
+            "# noop-oura-acm v2 label=normal gen=OuraRing4\n" +
                 "f,1000,330e324e5e0299028c01fe009400dffc,606,665,396,254,148,-801\n" +
                 "f,1040,330100\n" +
                 "m,1500,normal\n" +
                 "g,1600,DOUBLE_TAP\n" +
-                "p,1200,412,380,1,230,2,0\n",
+                "b,1200,812,150,2,200,300,GESTURE,DOUBLE_TAP\n",
             w.toString(),
         )
         assertEquals(2, rec.frames)
@@ -37,30 +38,34 @@ class OuraAcmRecorderTest {
     }
 
     @Test
-    fun detectorReportsCountedAndSubThresholdPeaksWithoutChangingDecisions() {
-        val peaks = ArrayList<OuraTapDetector.Peak>()
-        val observed = OuraTapDetector(observer = { peaks.add(it) })
+    fun detectorReportsBurstsWithoutChangingDecisions() {
+        val bursts = ArrayList<OuraTapDetector.Burst>()
+        val observed = OuraTapDetector(observer = { bursts.add(it) })
         val plain = OuraTapDetector()
-        fun feed(ms: Long, x: Int) {
+        var ms = 0L
+        fun feed(x: Int) {
             assertEquals(plain.sample(ms, x, 0, 0), observed.sample(ms, x, 0, 0))
+            ms += 20
         }
-        feed(0, 1000)
-        feed(20, 1000)
-        feed(40, 1250)     // deviation 250: above half the threshold (190), below 380
-        feed(60, 1000)
-        feed(100, 1500)    // deviation 500: impulse 1
-        feed(120, 1000)
-        feed(340, 1500)    // impulse 2, spacing 240
-        feed(360, 1000)
-        assertEquals(3, peaks.size)
-        assertFalse(peaks[0].counted)
-        assertEquals(250.0, peaks[0].deviation, 1.0)
-        assertTrue(peaks[1].counted)
-        assertEquals(-1L, peaks[1].spacingMs)
-        assertEquals(1, peaks[1].impulsesAfter)
-        assertTrue(peaks[2].counted)
-        assertEquals(240L, peaks[2].spacingMs)
-        assertEquals(2, peaks[2].impulsesAfter)
-        assertEquals(plain.flush(900), observed.flush(900))
+        fun quiet(n: Int) = repeat(n) { feed(1000) }
+        // A decaying ring on x, as a tap produces (jerk peaks at 1.8 x amplitude).
+        fun tap(amp: Int) = intArrayOf(100, -80, 55, -35, 20, -10).forEach { feed(1000 + amp * it / 100) }
+        quiet(20)
+        tap(120)                    // peak jerk 216: a burst, but below minPeak
+        quiet(20)
+        tap(500)                    // one impact
+        quiet(20)
+        tap(500); quiet(4); tap(500) // two impacts 200 ms apart
+        quiet(20)
+        assertEquals(3, bursts.size)
+        assertEquals(OuraTapDetector.Verdict.TOO_WEAK, bursts[0].verdict)
+        assertEquals(216, bursts[0].peak)
+        assertEquals(OuraTapDetector.Verdict.IMPACT_COUNT, bursts[1].verdict)
+        assertEquals(1, bursts[1].impacts)
+        assertEquals(OuraTapDetector.Verdict.GESTURE, bursts[2].verdict)
+        assertEquals(OuraTapDetector.Gesture.DOUBLE_TAP, bursts[2].gesture)
+        assertEquals(200L, bursts[2].firstSpacingMs)
+        assertFalse(bursts.any { it.quietLevel < 150 })
+        assertTrue(bursts.all { it.atMs > 0 })
     }
 }
