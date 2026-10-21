@@ -32,6 +32,26 @@ object OuraAcmCodec {
         }
     }
 
+    /**
+     * Split realtime ACM frames off the front of one notification. An ACM frame's length byte counts only
+     * its xyz payload (6 or 12), so a frame is `len + 4` bytes on the wire, not the `2 + len` of the
+     * ring's other outer frames. Parsed as an outer frame it loses its last two bytes and [decode]
+     * rejects it. Returns the frames and the offset where any remaining non-ACM bytes begin.
+     */
+    fun splitLeadingFrames(bytes: ByteArray): Pair<List<ByteArray>, Int> {
+        val frames = ArrayList<ByteArray>(1)
+        var i = 0
+        while (i + 2 <= bytes.size && (bytes[i].toInt() and 0xff) == ACCEL_TAG) {
+            val len = bytes[i + 1].toInt() and 0xff
+            if (len != 6 && len != 12) break
+            val total = len + 4
+            if (i + total > bytes.size) break
+            frames.add(bytes.copyOfRange(i, i + total))
+            i += total
+        }
+        return frames to i
+    }
+
     /** Opt-in bounded request candidate. Never write unless user explicitly arms. */
     fun enableForSeconds(seconds: Int): IntArray {
         require(seconds in 1..300) { "Capture must be 1-300 seconds" }

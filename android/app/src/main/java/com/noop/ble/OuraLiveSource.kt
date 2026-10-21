@@ -469,6 +469,8 @@ class OuraLiveSource(
     /** Per-capture counts for the end-of-capture line: `0x33` frames received, frames the codec accepted,
      *  gestures the detector emitted. Frames are counted on the GATT thread, read on main at the end. */
     @Volatile private var acmFramesSeen = 0
+    /** Set once per capture after the first `0x33` frame the codec rejected has been logged raw. */
+    @Volatile private var loggedUndecodedAcm = false
     @Volatile private var acmFramesDecoded = 0
     private var acmGestures = 0
 
@@ -492,6 +494,7 @@ class OuraLiveSource(
         tapDetector.reset()
         lastTapSampleMs = -1
         acmFramesSeen = 0
+        loggedUndecodedAcm = false
         acmFramesDecoded = 0
         acmGestures = 0
         tapSink = onGesture
@@ -507,6 +510,17 @@ class OuraLiveSource(
         handler.postDelayed(tapCaptureTimeout, seconds * 1000L)
         log("Oura: bounded gesture training armed for "+seconds+"s")
         return true
+    }
+
+    /**
+     * Log the first `0x33` frame of a capture that the codec rejected, raw. Accelerometer bytes only (no
+     * key, serial or address); once per capture, so an unknown layout leaves its evidence without flooding.
+     */
+    private fun logFirstUndecodedAcm(wire: ByteArray) {
+        if (loggedUndecodedAcm) return
+        loggedUndecodedAcm = true
+        log("Oura: first undecoded 0x33 frame this capture (${wire.size}B): " +
+            wire.joinToString(" ") { "%02x".format(it.toInt() and 0xff) })
     }
 
     /** OFF is best effort when Bluetooth has disconnected; the ring's timebox still expires. */
@@ -529,16 +543,15 @@ class OuraLiveSource(
         }
     }
 
-    /** Strict 0x33 parsing and ordered main-thread detector delivery. */
-    private fun onGestureAcm(frame: OuraOuterFrame) {
+    /** Strict 0x33 parsing and ordered main-thread detector delivery. [wire] is one whole ACM frame. */
+    private fun onGestureAcm(wire: ByteArray) {
         if (tapSink == null || ringGen !in GESTURE_CAPTURE_GENS) return
         acmFramesSeen++
-        val wire = ByteArray(frame.body.size + 2)
-        wire[0] = 0x33
-        wire[1] = frame.body.size.toByte()
-        frame.body.forEachIndexed { i, b -> wire[i + 2] = b.toByte() }
         val axes = OuraAcmCodec.decode(wire)
-        if (axes.isEmpty()) return
+        if (axes.isEmpty()) {
+            logFirstUndecodedAcm(wire)
+            return
+        }
         acmFramesDecoded++
         val epoch = tapEpoch
         handler.post {
@@ -2014,7 +2027,12 @@ class OuraLiveSource(
      */
     private fun handleNotification(data: ByteArray) = guardedCallback("notification") {
         val d = driver ?: return@guardedCallback
-        val bytes = IntArray(data.size) { data[it].toInt() and 0xFF }
+        // Realtime ACM frames first, by their own length rule ([OuraAcmCodec.splitLeadingFrames]); the
+        // outer-frame parser below would cut two bytes off each one and hand the tail to the reassembler.
+        val (acmFrames, acmEnd) = OuraAcmCodec.splitLeadingFrames(data)
+        for (f in acmFrames) onGestureAcm(f)
+        if (acmEnd >= data.size) return@guardedCallback
+        val bytes = IntArray(data.size - acmEnd) { data[acmEnd + it].toInt() and 0xFF }
         // Split any packed outer frames; route 0x2F secure sub-frames through the driver's secure handler
         // and feed all other bytes to the TLV reassembler.
         val nonSecure = ArrayList<Int>()
@@ -2054,7 +2072,13 @@ class OuraLiveSource(
                 }
             }
             if (frame.op == 0x33) {
-                onGestureAcm(frame) // realtime ACM, not a banked health event
+                // A 0x33 frame the ACM splitter did not recognise (unexpected length byte): count it and
+                // keep its raw bytes as evidence; never feed it to the health-event reassembler.
+                val wire = ByteArray(frame.body.size + 2)
+                wire[0] = 0x33
+                wire[1] = frame.body.size.toByte()
+                frame.body.forEachIndexed { i, b -> wire[i + 2] = b.toByte() }
+                onGestureAcm(wire)
             } else if (frame.op == OuraFraming.secureSessionOp) {
                 val secure = OuraFraming.parseSecureFrame(frame) ?: continue
                 routeSecure(d, secure)
