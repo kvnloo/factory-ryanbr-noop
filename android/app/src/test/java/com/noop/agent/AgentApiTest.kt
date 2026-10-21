@@ -243,6 +243,16 @@ class AgentApiTest {
         assertEquals(AgentAudit.MAX_LINES, File(dir, "audit.jsonl").readLines().count { it.isNotBlank() })
     }
 
+    @Test
+    fun auditKeepsEveryEntryAcrossInstancesAndThreads() {
+        val file = File(dir, "audit.jsonl")
+        val threads = (0 until 4).map { i ->
+            Thread { val a = AgentAudit(file) { now }; repeat(25) { a.record("read", "t$i", "ok") } }
+        }
+        threads.forEach { it.start() }; threads.forEach { it.join() }
+        assertEquals(100, file.readLines().count { it.isNotBlank() })
+    }
+
     // ---- pairing + broker revocation ------------------------------------------------------------
 
     private val token = "Tok_abcdefghijklmnopqrstuvwxyz0123456789"

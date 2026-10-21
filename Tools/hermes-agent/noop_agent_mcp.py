@@ -79,9 +79,9 @@ class Redactor:
                 "nlp_engine_name": "spacy", "models": [{"lang_code": "en", "model_name": os.environ.get("NOOP_AGENT_SPACY", "en_core_web_sm")}],
             }).create_engine()
             self._analyzer = AnalyzerEngine(nlp_engine=nlp, supported_languages=["en"])
-            import presidio_analyzer
+            from importlib.metadata import version
 
-            self.engine = f"presidio-analyzer {getattr(presidio_analyzer, '__version__', '?')}"
+            self.engine = f"presidio-analyzer {version('presidio-analyzer')}"
         except Exception:  # noqa: BLE001 - fall back, and say so in every result
             self._analyzer = None
 
