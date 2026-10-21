@@ -277,7 +277,7 @@ h1{{font-size:22px;margin:0}} h2{{font-size:15px;text-transform:uppercase;letter
 .grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}}
 .card{{background:#162026;border:1px solid #23323a;border-radius:14px;padding:14px}} .card.dim{{opacity:.5}}
 .card h3{{margin:0 0 4px;font-size:13px;color:#9fb4bb;font-weight:600}} .v{{font-size:24px;margin:2px 0 8px;font-weight:650}}
-.sub{{font-size:12px;color:#8a9aa0;font-weight:400}} .t{{font-size:12px;color:#b9d7a0}}
+.sub{{font-size:12px;color:#8a9aa0;font-weight:400}} .t{{font-size:12px;color:#c9d3d6}}
 .bar{{position:relative;height:8px;background:linear-gradient(90deg,#24414c,#2f6a5b);border-radius:6px;margin:6px 0}}
 .bar i{{position:absolute;top:-3px;width:3px;height:14px;border-radius:2px}} .bar .mean{{background:#9fb4bb}} .bar .now{{background:#ffd166;width:5px}}
 .facts td{{padding:4px 12px 4px 0}} .advice{{background:#13241c;border:1px solid #2b5a43;border-radius:14px;padding:4px 16px}}
