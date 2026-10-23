@@ -1353,6 +1353,7 @@ fun broken(value: Int) = "broken ${run { Trace.suffix(value) }
         self.write_clean_tree()
         frozen_map = parity_ledger.build_compact_twin_map(self.root)
         baseline = self.baseline_for(frozen_map)
+        self.mark_current_tree_as_origin_main()
         self.swift.write_text(
             self.swift.read_text()
             + "\npublic func newlyUnpaired(_ value: Int) -> Int { value }\n"
