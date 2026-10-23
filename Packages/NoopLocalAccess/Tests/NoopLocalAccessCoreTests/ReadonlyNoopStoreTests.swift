@@ -1,4 +1,5 @@
 import GRDB
+import Foundation
 import XCTest
 @testable import NoopLocalAccessCore
 
